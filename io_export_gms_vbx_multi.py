@@ -13,9 +13,25 @@ import bpy
 import shutil   # for image file copy
 import json
 import os
-from array import *
 from os import path
-from struct import pack
+from os.path import splitext
+from array import *
+from struct import pack, calcsize
+
+# Conversion functions
+def float_to_int(val):
+    return int(val*255)
+
+def color_to_binary(val):
+    return [int(x*255) for x in reversed(val)]
+
+def vertex_group_ids_to_bitmask(vertex):
+    list = [x.group for x in vertex.groups]
+    # TODO Make use of some aggregator function
+    masked = 0
+    for group in list:
+        masked |= 1 << group
+    return masked
 
 # First preparations
 def prepare_selection():
@@ -28,84 +44,146 @@ def prepare_selection():
     bpy.ops.object.convert(target='MESH')
 
 # Prepare vertex formats and object mappings
-def prep():
+def prep(context,format_options):
+    # Get list of all objects
+    #context.
     pass
 
-# The final function for the basic loop!
-def export():
-    # First things first: prepare selection (import from libraries, make duplis real, etc, ...
-    prepare_selection()
-
-from array import *
-from struct import pack
-from os.path import splitext
-import json
-import bpy
-
-#import logging
-
-# Return an array containing mesh data according to the given format
-# Append interpolation values when a second mesh is provided
-# PRE: vertex indices (actually loop indices) need to correspond between meshes
-# PRE: mesh should be triangulated
-def mesh_data_to_bytearray(format,added_vtx_info,mesh1,mesh2=None):
-    vertex_data = array('B')
+# Latest function for getting data from each object in the scene hierarchy
+# TODO: document format of return value
+def get_byte_data(attribs,context):
+    # Get objects
+    s = context.scene
+    o = context.object
+    m = o.data
     
-    uvs = mesh1.uv_layers.active.data if len(mesh1.uv_layers) > 0 else None
+    # Get all attributes from ref, defined in attr
+    # and place them at appropriate indexes in list
+    def fetch_attribs(attr,ref,list):
+        for attrib in attr:
+            fmt = attr[attrib]['fmt']
+            indices = attr[attrib]['pos']
+            val = getattr(ref,attrib)
+            if 'func' in attr[attrib]:
+                val = attr[attrib]['func'](val)
+            if len(fmt) == 1:
+                val_bin = pack(fmt,val)
+            else:
+                val_bin = pack(fmt,*val)
+            for j in indices:
+                list[j] = val_bin
     
-    # Loop per vertex
-    for loop in mesh1.loops:
-        # Get the face corresponding to the loop
-        face = mesh1.polygons[loop.index // 3]                      # Assuming triangulated faces!
-        mat  = mesh1.materials[face.material_index] if len(mesh1.materials) > 0 else None
-        vtx  = mesh1.vertices[loop.vertex_index]
-        pos = vtx.co
-        nml = vtx.normal
-        col = [int(x) for x in mat.diffuse_color*255] if mat != None else [255,255,255]
-        col.reverse()                                               #bgr
-        a = mat.alpha*255
-        uv = uvs[loop.index].uv[:] if uvs != None else (0,0)
+    #Get all indices in the attributes array that will contain interpolated values
+    lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
+    lerp_index = lerped_indices[0]          # Index of first interpolated attribute value
+
+    # Convert linear list to nested dictionary for easier access while looping
+    map_unique = {}
+    
+    for a in attribs:
+        map_unique[a[0]] = dict()
+    
+    for a in attribs:
+        map_unique[a[0]][a[1]]  = a[2]
+        map_unique[a[0]][a[1]]['pos']  = []
+    
+    for i, a in enumerate(attribs):
+        map_unique[a[0]][a[1]]['pos'].append(i)
+
+    # (TODO: perform dummy pass through object data to dynamically determine format (see lines below))
+    # Note: current code is sufficient at the moment
+    fmt_cur = ''
+    for a in attribs[:lerp_index]:      # Current attribs format
+        fmt_cur += a[2]['fmt']
+    fmt = ''
+    for a in attribs:                   # All attribs format
+        fmt += a[2]['fmt']
+    fmt_cur_size = calcsize(fmt_cur)
+    fmt_size = calcsize(fmt)
+
+    # Generate list with required bytearrays for each frame (assuming triangulated faces)
+    frame_count = s.frame_end-s.frame_start+1
+    arr = [bytearray(fmt_size*len(m.polygons)*3) for x in range(frame_count)]
+
+    # Init list
+    list = [0 for i in attribs]
+
+    for i in range(frame_count):
+        s.frame_set(s.frame_start+i)
         
-        # Current frame vertex data
-        for attrib in format:
-           if attrib == 'Pos':
-               # in_Position (x,y,z)
-                vertex_data.extend(pack('fff',*pos))
-           elif attrib == 'Normal':
-               # in_Normal (x,y,z)
-               vertex_data.extend(pack('fff',*nml))
-           elif attrib == 'Colour':
-               # in_Colour (r,g,b,a)
-               vertex_data.extend(pack('BBB',*col))                     #bgr
-           elif attrib == 'Alpha':
-                # Alpha
-               vertex_data.extend(pack('B',a))                          #a
-           elif attrib == 'Textcoord':
-               # in_TextureCoord (u,v)
-               vertex_data.extend(pack('ff',*uv))                       # Invert y textcoord
+        # Make a copy of object and data to work with
+        c = o.copy()
+        s.objects.link(c)
+        mc = c.data = o.data.copy()
         
-        # Next frame vertex data
-        if mesh2 != None:
-            face = mesh2.polygons[loop.index // 3]                      # Assuming triangulated faces!
-            vtx = mesh2.vertices[loop.vertex_index]
-            pos = vtx.co
-            nml = vtx.normal
+        if 'scene' in map_unique:
+            fetch_attribs(map_unique['scene'],s,list)
+        
+        uvs = mc.uv_layers.active.data
+        
+        # TODO: foreach object in selection
+        
+        
+        # Select current object
+        for k in s.objects: k.select = False
+        c.select = True
+        s.objects.active = c
+        
+        # Apply modifiers and transform
+        bpy.ops.object.modifier_add(type='TRIANGULATE')
+        bpy.ops.object.convert(target='MESH')
+        bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
+        
+        c.select = True
+        
+        a = 0   # Counter for offsets in bytearrays
+        for p in mc.polygons:
+            if 'polygon' in map_unique:
+                fetch_attribs(map_unique['polygon'],p,list)
             
-            for attrib in format:
-                if attrib == 'Pos':
-                    vertex_data.extend(pack('fff',*pos))
-                elif attrib == 'Normal':
-                    vertex_data.extend(pack('fff',*nml))
+            if 'material' in map_unique:
+                mat = mc.materials[p.material_index]
+                fetch_attribs(map_unique['material'],mat,list)
+                
+            for li in p.loop_indices:
+                # First get loop index
+                loop = mc.loops[li]
+                # Get vertex
+                v = mc.vertices[loop.vertex_index]
+                
+                # Get UV
+                uv = uvs[loop.index]
+                if 'uv' in map_unique:
+                    fetch_attribs(map_unique['uv'],uv,list)
+                
+                # Get vertex attributes
+                if 'vertex' in map_unique:
+                    fetch_attribs(map_unique['vertex'],v,list)
+                
+                # Now join attribute bytes together
+                bytes = b''.join(list)
+                # Index 'calculations'
+                offset = a * fmt_size
+                # Vertex format is always: current frame data, next frame data
+                arr[i][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                arr[i-1][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
+                a = a + 1
         
-        # Append additional vertex info provided by the caller
-        vertex_data.extend(added_vtx_info)
+        # Delete copies of objects and meshes
+        bpy.ops.object.delete()     # Note: copied meshes still exist until reload
         
-    return vertex_data
+        # Select current object again
+        for k in s.objects: k.select = False
+        o.select = True
+        s.objects.active = o
+        
+    return arr
 
 # TODO: batch export objects
 # vertex index goes into vertex buffer, object index goes into json file
 # PRE: assuming triangulated faces
 # TODO: rename to write_mesh_data??
+# TODO: cleanup and make much more generic
 def get_object_data(object, filepath):
     m = object.data
     
@@ -150,99 +228,6 @@ def get_object_data(object, filepath):
     result = {"batches": batches, "geometry": fname}            # Build JSON object
     
     return (data, result)
-
-# << Existing functionality from previous morph exporter - to be fully reworked >>
-# The core loop is important
-def write_vtx_buffer(context, filepath, caller):
-    # Easier names
-    s = context.scene
-    
-    # Remember selection
-    selection = context.selected_objects
-    active = context.active_object
-    
-    # Consider only supported object types
-    working_selection = context.selected_objects if caller.selection_only else context.scene.objects
-    working_selection = [x for x in working_selection if x.type in {'MESH'}]    # TODO: support 'EMPTY' with duplis
-    
-    # Check if working selection contains objects, cancel if not
-    if len(working_selection) == 0:
-        return {'CANCELLED'}
-    
-    # Open files
-    f_data = open(filepath, 'wb')
-    
-    # Retrieve vertex format (attributes must be in order!)
-    vertex_format = caller.vertex_format.split(',')
-    
-    # Initialize some stuff
-    b = working_selection[0]
-    old_frame = s.frame_current
-    
-    frame_range = range(s.frame_start,s.frame_end+1)
-    no_frames = len(frame_range)
-    
-    # Reset working selection
-    for obj in s.objects:
-        obj.select = True if obj in working_selection else False
-    s.objects.active = b
-    
-    s.frame_set(s.frame_start)
-    
-    # Generate first frame's 'current' mesh
-    make_merged_copy(context)
-    obj_cur = context.active_object                 # Result is now available in context.active_object
-    obj_nxt = None
-    
-    i = 0   # Frame index in vertex buffer
-    for frame in frame_range:
-        # Initialize
-        additional_vertex_info = array('B')
-        additional_vertex_info.extend(pack('f',i))
-        i += 1
-        
-        # Calculate and set next frame to be generated
-        frame_next = frame % no_frames
-        s.frame_set(frame_next)
-        
-        # Reset working selection
-        for obj in s.objects:
-            obj.select = True if obj in working_selection else False
-        s.objects.active = b
-        
-        make_merged_copy(context)
-        obj_nxt = context.active_object             # Result is now available in context.active_object
-        
-        # TODO: set object origin to (0,0,0) to allow easy scaling, scale y by -1 and flip normals
-        #context.scene.cursor_location = [0,0,0]
-        #bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-        
-        # Write current frame
-        data = mesh_data_to_bytearray(vertex_format,additional_vertex_info,obj_cur.data,obj_nxt.data) # mesh_cur and mesh_nxt should have identical loop indices and originate from the same joined meshes
-        data.tofile(f_data)
-        
-        # Delete current joined object
-        bpy.ops.object.select_pattern(pattern=obj_cur.name,extend=False)
-        bpy.ops.object.delete()
-        
-        # Make 'cur' reference the 'nxt' frame data (this frame's next is next frame's current)
-        obj_cur = obj_nxt
-    
-    # Delete last joined object
-    bpy.ops.object.select_pattern(pattern=obj_nxt.name,extend=False)
-    bpy.ops.object.delete()
-    
-    # Restore current frame
-    s.frame_set(old_frame)
-    
-    # Restore selection and active
-    for obj in selection:
-        obj.select = True
-    s.objects.active = active
-    
-    f_data.close()
-    
-    return {'FINISHED'}
 
 # TODO: replace with improved function prepare_selection()
 def make_merged_copy(context):
@@ -298,10 +283,34 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         description="Only export objects that are currently selected",
     )
     
-    visible_layers = BoolProperty(
-        name="Visible Layers",
-        default=True,
-        description="Export selection on currently visible layers",
+    frame_option = EnumProperty(
+        name="Frame",
+        description="Which frames to export",
+        items=(('cur',"Current","Export current frame only"),
+               ('all',"All","Export all frames in range"),
+        )
+    )
+    
+    batch_mode = EnumProperty(
+        name="Batch Mode",
+        description="How to split individual object data over files",
+        items=(('one',"Single File", "Batch all into a single file"),
+               ('perobj',"Per Object", "Create a file for each object in the selection"),
+               ('perfra',"Per Frame", "Create a file for each frame"),
+               ('objfra',"Per Object Then Frame", "Create a directory for each object with a file for each frame"),
+               ('fraobj',"Per Frame Then Object", "Create a directory for each frame with a file for each object"),
+        )
+    )
+    
+    format_options = EnumProperty(
+        name="Format Options",
+        options={'ENUM_FLAG'},
+        description="Which attributes to include in format",
+        items=(('pos',"Position","Include vertex position in format"),
+               ('nml',"Normal","Include vertex normal in format"),
+               ('clr',"Colour","Include material diffuse colour in format"),
+               ('uvs',"UVs","Include all UV coordinates in format")
+        )
     )
     
     vertex_groups = BoolProperty(
@@ -309,31 +318,34 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         description="Tag vertices with an additional vertex group attribute and add vertex group mapping to json file",
     )
     
-    batch_mode = EnumProperty(
-        name="Batch Mode",
-        description="How to split individual object data over files",
-        items=(('Single',"Single File", "Batch all into a single file"),
-               ('Object',"One File Per Object", "Create a file for each object in the selection"),
-        )
+    join_into_active = BoolProperty(
+        name="Join Into Active",
+        default=False,
+        description="Whether to join the selection into the active object",
     )
+    
+    split_by_material = BoolProperty(
+        name="Split By Material",
+        default=False,
+        description="Whether to split joined mesh by material after joining",
+    )
+    
+    # TODO: remove this hard-coded stuff
+    attribs = [
+    ("vertex","co",{'fmt':'fff'}),
+    ("vertex","normal",{'fmt':'fff'}),
+    ("uv","uv",{'fmt':'ff'}),
+    ("material","diffuse_color",{'fmt':'BBB','func':color_to_binary}),
+    ("material","alpha",{'fmt':'B','func':float_to_int}),
+    ("vertex","co",{'fmt':'fff'},'i'),
+    ("vertex","normal",{'fmt':'fff'},'i'),
+    ]
 
     def execute(self, context):
+        result = get_byte_data(self.attribs,context)
         f = open(self.filepath,"wb")
-        
-        objects = []
-        offset = 0
-        for o in context.selected_objects: 
-            data, result = get_object_data(o, self.filepath)
-            transform = {"location":o.location[:], "rotation_euler":o.rotation_euler[:], "scale":o.scale[:]}
-            objects.append({"name":o.name, "transform":transform, "data":result, "offset":offset})
-            offset = offset + len(data)
-            data.tofile(f)
-        
-        f.close()
-        
-        json_fname = os.path.splitext(self.filepath)[0]+'.json'
-        f = open(json_fname,"w")
-        json.dump(objects,f)
+        for a in result:
+            f.write(a)
         f.close()
         
         return {'FINISHED'}
