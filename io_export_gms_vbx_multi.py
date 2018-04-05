@@ -99,9 +99,11 @@ def get_byte_data(self,attribs,context):
     fmt_cur_size = calcsize(fmt_cur)
     fmt_size = calcsize(fmt)
 
-    # Generate list with required bytearrays for each frame (assuming triangulated faces)
+    # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
+    # Format of arr is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
     arr = [bytearray(fmt_size*len(m.polygons)*3) for x in range(frame_count)]
+    arr2 = [{obj.name:bytearray(fmt_size*len(m.polygons)*3) for obj in context.selected_objects} for x in range(frame_count)]
 
     # Init list
     list = [0 for i in attribs]
@@ -109,18 +111,18 @@ def get_byte_data(self,attribs,context):
     for i in range(frame_count):
         s.frame_set(s.frame_start+i)
         
+        if 'scene' in map_unique:
+            fetch_attribs(map_unique['scene'],s,list)
+        
+        # TODO: foreach object in selection
+        
+        
         # Make a copy of object and data to work with
         c = o.copy()
         s.objects.link(c)
         mc = c.data = o.data.copy()
         
-        if 'scene' in map_unique:
-            fetch_attribs(map_unique['scene'],s,list)
-        
         uvs = mc.uv_layers.active.data
-        
-        # TODO: foreach object in selection
-        
         
         # Select current object
         for k in s.objects: k.select = False
@@ -134,7 +136,7 @@ def get_byte_data(self,attribs,context):
         
         c.select = True
         
-        a = 0   # Counter for offsets in bytearrays
+        a = 0   # Counter for offsets in bytearrays (TODO: per object)
         for p in mc.polygons:
             if 'polygon' in map_unique:
                 fetch_attribs(map_unique['polygon'],p,list)
@@ -163,8 +165,10 @@ def get_byte_data(self,attribs,context):
                 # Index 'calculations'
                 offset = a * fmt_size
                 # Vertex format is always: current frame data, next frame data
-                arr[i][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
-                arr[i-1][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
+                #arr[i][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                #arr[i-1][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
+                arr2[i][o.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                arr2[i-1][o.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
                 a = a + 1
         
         # Delete copies of objects and meshes
@@ -175,7 +179,7 @@ def get_byte_data(self,attribs,context):
         o.select = True
         s.objects.active = o
         
-    return arr
+    return arr2
 
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
@@ -335,8 +339,9 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         # Final step: write to file(s)
         f = open(self.filepath,"wb")
         # TODO: per frame, per object, ...
-        for a in result:
-            f.write(a)
+        for frame in result:
+            for obj in frame:
+                f.write(frame[obj])
         f.close()
         
         return {'FINISHED'}
