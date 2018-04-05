@@ -52,8 +52,6 @@ def prepare_selection():
 def get_byte_data(self,attribs,context):
     # Get objects
     s = context.scene
-    o = context.object
-    m = o.data
     
     # Get all attributes from ref, defined in attr
     # and place them at appropriate indexes in list
@@ -102,8 +100,8 @@ def get_byte_data(self,attribs,context):
     # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
     # Format of arr is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
-    arr = [bytearray(fmt_size*len(m.polygons)*3) for x in range(frame_count)]
-    arr2 = [{obj.name:bytearray(fmt_size*len(m.polygons)*3) for obj in context.selected_objects} for x in range(frame_count)]
+    #arr = [bytearray(fmt_size*len(m.polygons)*3) for x in range(frame_count)]
+    arr = [{obj.name:bytearray(fmt_size*len(obj.data.polygons)*3) for obj in context.selected_objects} for x in range(frame_count)]
 
     # Init list
     list = [0 for i in attribs]
@@ -115,7 +113,7 @@ def get_byte_data(self,attribs,context):
             fetch_attribs(map_unique['scene'],s,list)
         
         # TODO: foreach object in selection
-        
+        o, m = context.object, context.object.data
         
         # Make a copy of object and data to work with
         c = o.copy()
@@ -164,11 +162,11 @@ def get_byte_data(self,attribs,context):
                 bytes = b''.join(list)
                 # Index 'calculations'
                 offset = a * fmt_size
-                # Vertex format is always: current frame data, next frame data
+                # Vertex format is always: block of current frame data, block of next frame data
                 #arr[i][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
                 #arr[i-1][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
-                arr2[i][o.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
-                arr2[i-1][o.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
+                arr[i][o.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                arr[i-1][o.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
                 a = a + 1
         
         # Delete copies of objects and meshes
@@ -179,7 +177,7 @@ def get_byte_data(self,attribs,context):
         o.select = True
         s.objects.active = o
         
-    return arr2
+    return arr
 
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
