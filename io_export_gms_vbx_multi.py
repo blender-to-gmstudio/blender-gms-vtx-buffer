@@ -71,9 +71,10 @@ def get_byte_data(self,attribs,context):
     
     #Get all indices in the attributes array that will contain interpolated values
     lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
-    lerp_index = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
+    lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
 
     # Convert linear list to nested dictionary for easier access while looping
+    # TODO: clean this up!
     map_unique = {}
     
     for a in attribs:
@@ -89,7 +90,7 @@ def get_byte_data(self,attribs,context):
     # (TODO: perform dummy pass through object data to dynamically determine format (see lines below))
     # Note: current code is sufficient at the moment
     fmt_cur = ''
-    for a in attribs[:lerp_index]:      # Current attribs format
+    for a in attribs[:lerp_start]:      # Current attribs format
         fmt_cur += a[2]['fmt']
     fmt = ''
     for a in attribs:                   # All attribs format
@@ -100,10 +101,9 @@ def get_byte_data(self,attribs,context):
     # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
     # Format of arr is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
-    #arr = [bytearray(fmt_size*len(m.polygons)*3) for x in range(frame_count)]
     arr = [{obj.name:bytearray(fmt_size*len(obj.data.polygons)*3) for obj in context.selected_objects} for x in range(frame_count)]
 
-    # Init list
+    # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
     list = [0 for i in attribs]
 
     for i in range(frame_count):
@@ -112,70 +112,72 @@ def get_byte_data(self,attribs,context):
         if 'scene' in map_unique:
             fetch_attribs(map_unique['scene'],s,list)
         
-        # TODO: foreach object in selection
-        o, m = context.object, context.object.data
-        
-        # Make a copy of object and data to work with
-        c = o.copy()
-        s.objects.link(c)
-        mc = c.data = o.data.copy()
-        
-        uvs = mc.uv_layers.active.data
-        
-        # Select current object
-        for k in s.objects: k.select = False
-        c.select = True
-        s.objects.active = c
-        
-        # Apply modifiers and transform
-        bpy.ops.object.modifier_add(type='TRIANGULATE')
-        bpy.ops.object.convert(target='MESH')
-        bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
-        
-        c.select = True
-        
-        a = 0   # Counter for offsets in bytearrays (TODO: per object)
-        for p in mc.polygons:
-            if 'polygon' in map_unique:
-                fetch_attribs(map_unique['polygon'],p,list)
+        # For each object in selection
+        # TODO, BUG: works fine for single mesh, but likely not for multiple yet
+        for o in context.selected_objects:
+            # Make a copy of object and data to work with
+            c, c.data = o.copy(), o.data.copy()
+            s.objects.link(c)
             
-            if 'material' in map_unique:
-                mat = mc.materials[p.material_index]
-                fetch_attribs(map_unique['material'],mat,list)
+            # TODO: use object.to_mesh()!
+            
+            uvs = c.data.uv_layers.active.data
+            
+            # Select current object
+            for k in s.objects: k.select = False
+            c.select = True
+            s.objects.active = c
+            
+            # Apply modifiers and transform
+            bpy.ops.object.modifier_add(type='TRIANGULATE')
+            bpy.ops.object.convert(target='MESH')
+            bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
+            
+            c.select = True
+            
+            a = 0   # Counter for offsets in bytearrays (TODO: per object)
+            for p in c.data.polygons:
+                if 'polygon' in map_unique:
+                    fetch_attribs(map_unique['polygon'],p,list)
                 
-            for li in p.loop_indices:
-                # First get loop index
-                loop = mc.loops[li]
-                # Get vertex
-                v = mc.vertices[loop.vertex_index]
-                
-                # Get UV
-                uv = uvs[loop.index]
-                if 'uv' in map_unique:
-                    fetch_attribs(map_unique['uv'],uv,list)
-                
-                # Get vertex attributes
-                if 'vertex' in map_unique:
-                    fetch_attribs(map_unique['vertex'],v,list)
-                
-                # Now join attribute bytes together
-                bytes = b''.join(list)
-                # Index 'calculations'
-                offset = a * fmt_size
-                # Vertex format is always: block of current frame data, block of next frame data
-                #arr[i][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
-                #arr[i-1][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
-                arr[i][o.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
-                arr[i-1][o.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
-                a = a + 1
-        
-        # Delete copies of objects and meshes
-        bpy.ops.object.delete()     # Note: copied meshes still exist until reload
-        
-        # Select current object again
-        for k in s.objects: k.select = False
-        o.select = True
-        s.objects.active = o
+                if 'material' in map_unique:
+                    mat = c.data.materials[p.material_index]
+                    fetch_attribs(map_unique['material'],mat,list)
+                    
+                for li in p.loop_indices:
+                    # First get loop index
+                    loop = c.data.loops[li]
+                    # Get vertex
+                    v = c.data.vertices[loop.vertex_index]
+                    
+                    # Get UV
+                    uv = uvs[loop.index]
+                    if 'uv' in map_unique:
+                        fetch_attribs(map_unique['uv'],uv,list)
+                    
+                    # Get vertex attributes
+                    if 'vertex' in map_unique:
+                        fetch_attribs(map_unique['vertex'],v,list)
+                    
+                    # Now join attribute bytes together
+                    # Remember: interpolated values aren't interpolated yet!
+                    bytes = b''.join(list)
+                    # Index 'calculations'
+                    offset = a * fmt_size
+                    # Vertex format is always: block of current frame data, block of next frame data
+                    # The below lines copy the current frame bytes to the current frame bytearray for the given object
+                    # and copy the interpolated part of the current frame bytes to the previous frame bytearray for the given object
+                    arr[i+0][o.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                    arr[i-1][o.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
+                    a = a + 1
+            
+            # Delete copies of objects and meshes
+            bpy.ops.object.delete()     # Note: copied meshes still exist until reload
+            
+            # Select current object again
+            for k in s.objects: k.select = False
+            o.select = True
+            s.objects.active = o
         
     return arr
 
