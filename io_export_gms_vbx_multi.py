@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GM:Studio MultiTexture",
     "description": "Export (part of) the current scene to a buffer that can be loaded in GM:Studio",
     "author": "Bart Teunis",
-    "version": (0, 4, 0),
+    "version": (0, 5, 0),
     "blender": (2, 78, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -113,42 +113,30 @@ def get_byte_data(self,attribs,context):
             fetch_attribs(map_unique['scene'],s,list)
         
         # For each object in selection
-        # TODO, BUG: works fine for single mesh, but likely not for multiple yet
+        # TODO: filter objects of type 'MESH'
         for o in context.selected_objects:
-            # Make a copy of object and data to work with
-            c, c.data = o.copy(), o.data.copy()
-            s.objects.link(c)
+            # Generate a mesh with modifiers applied (not transforms!)
+            data = o.to_mesh(context.scene,True,'RENDER')
             
-            # TODO: use object.to_mesh()!
+            # Apply object transform to mesh (TODO)
             
-            uvs = c.data.uv_layers.active.data
             
-            # Select current object
-            for k in s.objects: k.select = False
-            c.select = True
-            s.objects.active = c
-            
-            # Apply modifiers and transform
-            bpy.ops.object.modifier_add(type='TRIANGULATE')
-            bpy.ops.object.convert(target='MESH')
-            bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
-            
-            c.select = True
+            uvs = data.uv_layers.active.data
             
             a = 0   # Counter for offsets in bytearrays (TODO: per object)
-            for p in c.data.polygons:
+            for p in data.polygons:
                 if 'polygon' in map_unique:
                     fetch_attribs(map_unique['polygon'],p,list)
                 
                 if 'material' in map_unique:
-                    mat = c.data.materials[p.material_index]
+                    mat = data.materials[p.material_index]
                     fetch_attribs(map_unique['material'],mat,list)
                     
                 for li in p.loop_indices:
                     # First get loop index
-                    loop = c.data.loops[li]
+                    loop = data.loops[li]
                     # Get vertex
-                    v = c.data.vertices[loop.vertex_index]
+                    v = data.vertices[loop.vertex_index]
                     
                     # Get UV
                     uv = uvs[loop.index]
@@ -170,14 +158,6 @@ def get_byte_data(self,attribs,context):
                     arr[i+0][o.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
                     arr[i-1][o.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
                     a = a + 1
-            
-            # Delete copies of objects and meshes
-            bpy.ops.object.delete()     # Note: copied meshes still exist until reload
-            
-            # Select current object again
-            for k in s.objects: k.select = False
-            o.select = True
-            s.objects.active = o
         
     return arr
 
