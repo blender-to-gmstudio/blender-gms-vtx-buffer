@@ -114,16 +114,19 @@ def get_byte_data(self,attribs,context):
         
         # For each object in selection
         # TODO: filter objects of type 'MESH'
-        for o in context.selected_objects:
+        for obj in context.selected_objects:
             # Generate a mesh with modifiers applied (not transforms!)
-            data = o.to_mesh(context.scene,True,'RENDER')
+            data = obj.to_mesh(context.scene,True,'RENDER')
             
             # Apply object transform to mesh (TODO)
             
+            # Add object data
+            if 'object' in map_unique:
+                fetch_attribs(map_unique['object'],obj,list)
             
             uvs = data.uv_layers.active.data
             
-            a = 0   # Counter for offsets in bytearrays (TODO: per object)
+            offset_index = 0   # Counter for offsets in bytearrays (TODO: per object)
             for p in data.polygons:
                 if 'polygon' in map_unique:
                     fetch_attribs(map_unique['polygon'],p,list)
@@ -151,13 +154,13 @@ def get_byte_data(self,attribs,context):
                     # Remember: interpolated values aren't interpolated yet!
                     bytes = b''.join(list)
                     # Index 'calculations'
-                    offset = a * fmt_size
+                    offset = offset_index * fmt_size
                     # Vertex format is always: block of current frame data, block of next frame data
                     # The below lines copy the current frame bytes to the current frame bytearray for the given object
                     # and copy the interpolated part of the current frame bytes to the previous frame bytearray for the given object
-                    arr[i+0][o.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
-                    arr[i-1][o.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
-                    a = a + 1
+                    arr[i+0][obj.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                    arr[i-1][obj.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
+                    offset_index = offset_index + 1
         
     return arr
 
@@ -291,14 +294,16 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         # TODO: preparation step
         
         
-        # TODO: join step
-        #bpy.ops.object.join()
+        # Join step
+        if self.join_into_active:
+            bpy.ops.object.join()
         
         # TODO: transformation and axes step
         
         
-        # TODO: split by material
-        #bpy.ops.mesh.separate(type='MATERIAL')
+        # Split by material
+        if self.split_by_material:
+            bpy.ops.mesh.separate(type='MATERIAL')
         
         # First convert the contents of vertex_format to something we can use
         # TODO: make the below format a more decent looking format...
