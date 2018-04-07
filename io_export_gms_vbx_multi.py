@@ -108,8 +108,7 @@ def get_byte_data(self,attribs,context):
             # Generate a mesh with modifiers applied (not transforms!)
             data = obj.to_mesh(context.scene,True,'RENDER')
             
-            # Apply object transform to mesh (TODO)
-            # The above function doesn't do this...
+            # Apply object transform to mesh => not going to happen, since join is meant for this
             
             # Add object data
             if 'object' in map_unique:
@@ -313,6 +312,9 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         box.prop(self,'split_by_material')
 
     def execute(self, context):
+        # TODO: create JSON file, too (!)
+        
+        
         # TODO: preparation step
         
         
@@ -329,7 +331,6 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         
         # First convert the contents of vertex_format to something we can use
         attribs = []
-        #for i in self.attr:
         for i in self.vertex_format:
             if i.func == '':
                 attribs.append((i.type,i.attr,{'fmt':i.fmt},'i' if i.int else ''))
@@ -341,11 +342,14 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         # Now execute
         result = get_byte_data(self,attribs,context)
         
-        # Final step: write to file(s)
+        # Final step: write all bytearrays to one or more file(s) in one or more directories
         f = open(self.filepath,"wb")
         # TODO: per frame, per object, ...
         for frame in result:
+            # TODO: create new directory
+            
             for obj in frame:
+                # TODO: create new file
                 f.write(frame[obj])
         f.close()
         
