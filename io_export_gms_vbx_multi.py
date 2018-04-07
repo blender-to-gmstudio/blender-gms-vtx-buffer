@@ -31,24 +31,14 @@ def vec_to_bytes(val):
 
 def vertex_group_ids_to_bitmask(vertex):
     list = [x.group for x in vertex.groups]
-    # TODO Make use of some aggregator function
     masked = 0
     for group in list:
         masked |= 1 << group
     return masked
 
-# First preparations
-def prepare_selection():
-    bpy.ops.object.duplicates_make_real()
-    bpy.ops.object.make_local(type='SELECT_OBDATA') # TODO: also MATERIAL??
-    bpy.ops.object.make_single_user(object=True,obdata=True,material=False,texture=False,animation=False)
-    bpy.ops.object.convert(target='MESH')
-    bpy.ops.object.join()
-    bpy.ops.object.modifier_add(type='TRIANGULATE')
-    bpy.ops.object.convert(target='MESH')
-
 # Latest function for getting data from each object in the scene hierarchy
-# TODO: document format of return value
+# Format of return value is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
+# (swap obj and frame to toggle between frame-first and object-first)
 def get_byte_data(self,attribs,context):
     # Get objects
     s = context.scene
@@ -97,11 +87,12 @@ def get_byte_data(self,attribs,context):
         fmt += a[2]['fmt']
     fmt_cur_size = calcsize(fmt_cur)
     fmt_size = calcsize(fmt)
+    
+    mesh_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
 
     # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
-    # Format of arr is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
-    arr = [{obj.name:bytearray(fmt_size*len(obj.data.polygons)*3) for obj in context.selected_objects} for x in range(frame_count)]
+    arr = [{obj.name:bytearray(fmt_size*len(obj.data.polygons)*3) for obj in mesh_objects} for x in range(frame_count)]
 
     # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
     list = [0 for i in attribs]
@@ -113,12 +104,12 @@ def get_byte_data(self,attribs,context):
             fetch_attribs(map_unique['scene'],s,list)
         
         # For each object in selection
-        # TODO: filter objects of type 'MESH'
-        for obj in context.selected_objects:
+        for obj in mesh_objects:
             # Generate a mesh with modifiers applied (not transforms!)
             data = obj.to_mesh(context.scene,True,'RENDER')
             
             # Apply object transform to mesh (TODO)
+            # The above function doesn't do this...
             
             # Add object data
             if 'object' in map_unique:
@@ -142,6 +133,7 @@ def get_byte_data(self,attribs,context):
                     v = data.vertices[loop.vertex_index]
                     
                     # Get UV
+                    # TODO: get all uv's! (i.e. support multiple texture slots/stages)
                     uv = uvs[loop.index]
                     if 'uv' in map_unique:
                         fetch_attribs(map_unique['uv'],uv,list)
@@ -172,6 +164,7 @@ class AttributeType(bpy.types.PropertyGroup):
     int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value", default=False)
     func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="")
 
+# Operators to get the vertex format customization add/remove to work
 # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel
 class AddAttributeOperator(Operator):
     """Add a new attribute to the vertex format"""
@@ -179,6 +172,7 @@ class AddAttributeOperator(Operator):
     bl_label = "Add Vertex Attribute"
 
     def execute(self, context):
+        # context.active_operator refers to ExportGMSMultiTex instance
         context.active_operator.vertex_format.add()
         return {'FINISHED'}
 
@@ -190,10 +184,11 @@ class RemoveAttributeOperator(Operator):
     id = bpy.props.IntProperty()
 
     def execute(self, context):
-        context.active_operator.vertex_format.remove(self.id)    # Eureka!
+        # context.active_operator refers to ExportGMSMultiTex instance
+        context.active_operator.vertex_format.remove(self.id)
         return {'FINISHED'}
 
-# TODO: where to place these??
+# Register these here already
 bpy.utils.register_class(AttributeType)
 bpy.utils.register_class(AddAttributeOperator)
 bpy.utils.register_class(RemoveAttributeOperator)
@@ -240,6 +235,19 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         )
     )
     
+    invert_uvs = BoolProperty(
+        name="Invert UV's",
+        description="Whether to invert UV's v (i.e. y) coordinate, i.e. (u,v) becomes (u,1-v)"
+    )
+    
+    handedness = EnumProperty(
+        name="Handedness",
+        description="Handedness of the coordinate system to be used",
+        items=(('r',"Right handed",""),
+               ('l',"Left handed",""),
+        )
+    )
+    
     vertex_format = CollectionProperty(
         name="Vertex Format",
         type=bpy.types.AttributeType,
@@ -264,10 +272,22 @@ class ExportGMSMultiTex(Operator, ExportHelper):
     
     def draw(self, context):
         layout = self.layout
-        layout.prop(self,'selection_only')
-        layout.prop(self,'frame_option')
-        layout.prop(self,'batch_mode')
-    
+        
+        box = layout.box()
+        
+        box.label("General:")
+        
+        box.prop(self,'selection_only')
+        box.prop(self,'frame_option')
+        box.prop(self,'batch_mode')
+        
+        box = layout.box()
+        
+        box.label("Transforms:")
+        
+        box.prop(self,'invert_uvs')
+        box.prop(self,'handedness')
+        
         box = layout.box()
         
         box.label("Vertex Format:")
@@ -283,12 +303,14 @@ class ExportGMSMultiTex(Operator, ExportHelper):
             row.prop(item,'int')
             opt_remove = row.operator("export_scene.remove_attribute_operator",text="Remove")
             opt_remove.id = index
-            
-        layout.label("Extras:")
         
-        layout.prop(self,'vertex_groups')
-        layout.prop(self,'join_into_active')
-        layout.prop(self,'split_by_material')
+        box = layout.box()
+        
+        box.label("Extras:")
+        
+        box.prop(self,'vertex_groups')
+        box.prop(self,'join_into_active')
+        box.prop(self,'split_by_material')
 
     def execute(self, context):
         # TODO: preparation step
@@ -306,7 +328,6 @@ class ExportGMSMultiTex(Operator, ExportHelper):
             bpy.ops.mesh.separate(type='MATERIAL')
         
         # First convert the contents of vertex_format to something we can use
-        # TODO: make the below format a more decent looking format...
         attribs = []
         #for i in self.attr:
         for i in self.vertex_format:
@@ -315,7 +336,6 @@ class ExportGMSMultiTex(Operator, ExportHelper):
             else:
                 # Note: currently using globals() to get a globally defined function - might change in the future...
                 # Important: a "bound method" is something different than a function and passes the 'self' as an additional parameter!
-                # TODO: find a clean way to add custom functions
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
         # Now execute
@@ -344,9 +364,6 @@ def register():
 
 def unregister():
     bpy.utils.unregister_class(ExportGMSMultiTex)
-    bpy.utils.unregister_class(AddAttributeOperator)
-    bpy.utils.unregister_class(RemoveAttributeOperator)
-    bpy.utils.unregister_class(AttributeType)
     bpy.types.INFO_MT_file_export.remove(menu_func_export)
 
 
