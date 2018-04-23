@@ -12,7 +12,7 @@ bl_info = {
 # Required imports
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty, CollectionProperty
-from bpy.types import Operator, PropertyGroup
+from bpy.types import Object, Operator, PropertyGroup
 import bpy
 import shutil                       # for image file copy
 import json
@@ -39,7 +39,10 @@ def vertex_group_ids_to_bitmask(vertex):
 # Latest function for getting data from each object in the scene hierarchy
 # Format of return value is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
 # (swap obj and frame to toggle between frame-first and object-first)
-def get_byte_data(self,attribs,context):
+# Notes: changes current frame and generates additional, temporary meshes
+# object_selection is the selection of mesh objects within the current scene
+# that are considered
+def get_byte_data(self,attribs,context,object_selection):
     # Get objects
     s = context.scene
     
@@ -64,7 +67,6 @@ def get_byte_data(self,attribs,context):
     lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
 
     # Convert linear list to nested dictionary for easier access while looping
-    # TODO: clean this up!
     map_unique = {}
     
     for a in attribs:
@@ -88,11 +90,11 @@ def get_byte_data(self,attribs,context):
     fmt_cur_size = calcsize(fmt_cur)
     fmt_size = calcsize(fmt)
     
-    mesh_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+    offset_index = {obj:0 for obj in object_selection}
 
     # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
-    arr = [{obj.name:bytearray(fmt_size*len(obj.data.polygons)*3) for obj in mesh_objects} for x in range(frame_count)]
+    arr = [{obj.name:bytearray(fmt_size*len(obj.data.polygons)*3) for obj in object_selection} for x in range(frame_count)]
 
     # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
     list = [0 for i in attribs]
@@ -104,7 +106,7 @@ def get_byte_data(self,attribs,context):
             fetch_attribs(map_unique['scene'],s,list)
         
         # For each object in selection
-        for obj in mesh_objects:
+        for obj in object_selection:
             # Generate a mesh with modifiers applied (not transforms!)
             data = obj.to_mesh(context.scene,True,'RENDER')
             
@@ -116,7 +118,7 @@ def get_byte_data(self,attribs,context):
             
             uvs = data.uv_layers.active.data
             
-            offset_index = 0   # Counter for offsets in bytearrays (TODO: per object)
+            offset_index[obj] = 0   # Counter for offsets in bytearrays
             for p in data.polygons:
                 if 'polygon' in map_unique:
                     fetch_attribs(map_unique['polygon'],p,list)
@@ -145,13 +147,13 @@ def get_byte_data(self,attribs,context):
                     # Remember: interpolated values aren't interpolated yet!
                     bytes = b''.join(list)
                     # Index 'calculations'
-                    offset = offset_index * fmt_size
+                    offset = offset_index[obj] * fmt_size
                     # Vertex format is always: block of current frame data, block of next frame data
                     # The below lines copy the current frame bytes to the current frame bytearray for the given object
                     # and copy the interpolated part of the current frame bytes to the previous frame bytearray for the given object
                     arr[i+0][obj.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
                     arr[i-1][obj.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
-                    offset_index = offset_index + 1
+                    offset_index[obj] = offset_index[obj] + 1
         
     return arr
 
@@ -312,8 +314,8 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         box.prop(self,'split_by_material')
 
     def execute(self, context):
-        # TODO: create JSON file, too (!)
-        
+        root, ext = splitext(self.filepath)
+        object_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         # TODO: preparation step
         
@@ -329,18 +331,23 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         if self.split_by_material:
             bpy.ops.mesh.separate(type='MATERIAL')
         
+        # Blender Python trickery: dynamic addition of an index variable to the class
+        bpy.types.Object.index = bpy.props.IntProperty()    # Each instance now has an index!
+        for i, obj in enumerate(object_selection):
+            obj.index = i
+        
         # First convert the contents of vertex_format to something we can use
         attribs = []
         for i in self.vertex_format:
             if i.func == '':
                 attribs.append((i.type,i.attr,{'fmt':i.fmt},'i' if i.int else ''))
             else:
-                # Note: currently using globals() to get a globally defined function - might change in the future...
+                # Note: currently using globals() to get a globally defined function - might (and should) change in the future...
                 # Important: a "bound method" is something different than a function and passes the 'self' as an additional parameter!
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
         # Now execute
-        result = get_byte_data(self,attribs,context)
+        result = get_byte_data(self,attribs,context,object_selection)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
         f = open(self.filepath,"wb")
@@ -352,6 +359,25 @@ class ExportGMSMultiTex(Operator, ExportHelper):
                 # TODO: create new file
                 f.write(frame[obj])
         f.close()
+        
+        # TODO: create JSON file, too (!) (WIP!!)
+        f_desc = open(root + ".json","w")
+        
+        desc = {}
+        object_listing = [{ "name":obj.name,
+                            "index":obj.index,
+                            "location":obj.location[:],
+                            "rotation":obj.rotation_euler[:],
+                            "scale":obj.scale[:]}
+                            for obj in context.selected_objects]
+        desc["objects"] = object_listing
+        
+        json.dump(desc,f_desc)
+        
+        f_desc.close()
+        
+        # Cleanup: remove dynamic property from class
+        del bpy.types.Object.index
         
         return {'FINISHED'}
 
