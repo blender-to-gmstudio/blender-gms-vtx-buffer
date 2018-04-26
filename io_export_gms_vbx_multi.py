@@ -1,8 +1,8 @@
 bl_info = {
-    "name": "Export GM:Studio MultiTexture",
-    "description": "Export (part of) the current scene to a buffer that can be loaded in GM:Studio",
+    "name": "Export GM:Studio Vertex Buffer",
+    "description": "Vertex buffer exporter for GM:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 5, 0),
+    "version": (0, 6, 0),
     "blender": (2, 78, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -116,7 +116,7 @@ def get_byte_data(self,attribs,context,object_selection):
             if 'object' in map_unique:
                 fetch_attribs(map_unique['object'],obj,list)
             
-            uvs = data.uv_layers.active.data
+            uvs = data.uv_layers.active.data    # TODO: handle case where object/mesh has no uv maps
             
             offset_index[obj] = 0   # Counter for offsets in bytearrays
             for p in data.polygons:
@@ -173,7 +173,7 @@ class AddAttributeOperator(Operator):
     bl_label = "Add Vertex Attribute"
 
     def execute(self, context):
-        # context.active_operator refers to ExportGMSMultiTex instance
+        # context.active_operator refers to ExportGMSVertexBuffer instance
         context.active_operator.vertex_format.add()
         return {'FINISHED'}
 
@@ -185,7 +185,7 @@ class RemoveAttributeOperator(Operator):
     id = bpy.props.IntProperty()
 
     def execute(self, context):
-        # context.active_operator refers to ExportGMSMultiTex instance
+        # context.active_operator refers to ExportGMSVertexBuffer instance
         context.active_operator.vertex_format.remove(self.id)
         return {'FINISHED'}
 
@@ -196,10 +196,10 @@ bpy.utils.register_class(RemoveAttributeOperator)
 
 # ExportHelper is a helper class, defines filename and
 # invoke() function which calls the file selector.
-class ExportGMSMultiTex(Operator, ExportHelper):
+class ExportGMSVertexBuffer(Operator, ExportHelper):
     """Export (part of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
-    bl_idname = "export_scene.gms_multitex" # important since its how bpy.ops.export_scene.gms_multitex is constructed
-    bl_label = "Export GM:Studio Buffer MultiTexture"
+    bl_idname = "export_scene.gms_vbx" # important since its how bpy.ops.export_scene.gms_vbx is constructed
+    bl_label = "Export GM:Studio Vertex Buffer"
     bl_options = {'PRESET'}                 # Allow presets of exporter configurations
 
     # ExportHelper mixin class uses this
@@ -254,11 +254,6 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         type=bpy.types.AttributeType,
     )
     
-    vertex_groups = BoolProperty(
-        name="Vertex Groups",
-        description="Tag vertices with an additional vertex group attribute and add vertex group mapping to json file",
-    )
-    
     join_into_active = BoolProperty(
         name="Join Into Active",
         default=False,
@@ -284,13 +279,6 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         
         box = layout.box()
         
-        box.label("Transforms:")
-        
-        box.prop(self,'invert_uvs')
-        box.prop(self,'handedness')
-        
-        box = layout.box()
-        
         box.label("Vertex Format:")
         
         box.operator("export_scene.add_attribute_operator",text="Add")
@@ -307,9 +295,15 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         
         box = layout.box()
         
+        box.label("Transforms:")
+        
+        box.prop(self,'invert_uvs')
+        box.prop(self,'handedness')
+        
+        box = layout.box()
+        
         box.label("Extras:")
         
-        box.prop(self,'vertex_groups')
         box.prop(self,'join_into_active')
         box.prop(self,'split_by_material')
 
@@ -328,6 +322,7 @@ class ExportGMSMultiTex(Operator, ExportHelper):
         
         
         # Split by material
+        # TODO: only useful when combined with join
         if self.split_by_material:
             bpy.ops.mesh.separate(type='MATERIAL')
         
@@ -360,11 +355,12 @@ class ExportGMSMultiTex(Operator, ExportHelper):
                 f.write(frame[obj])
         f.close()
         
-        # TODO: create JSON file, too (!) (WIP!!)
+        # Create JSON file (very basic at the moment...)
         f_desc = open(root + ".json","w")
         
         desc = {}
         object_listing = [{ "name":obj.name,
+                            "file":path.basename(self.filepath),
                             "index":obj.index,
                             "location":obj.location[:],
                             "rotation":obj.rotation_euler[:],
@@ -384,16 +380,16 @@ class ExportGMSMultiTex(Operator, ExportHelper):
 
 # Only needed if you want to add into a dynamic menu
 def menu_func_export(self, context):
-    self.layout.operator(ExportGMSMultiTex.bl_idname, text="GM:Studio MultiTexture (*.vbx)")
+    self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GM:Studio Vertex Buffer (*.vbx)")
 
 
 def register():
-    bpy.utils.register_class(ExportGMSMultiTex)
+    bpy.utils.register_class(ExportGMSVertexBuffer)
     bpy.types.INFO_MT_file_export.append(menu_func_export)
 
 
 def unregister():
-    bpy.utils.unregister_class(ExportGMSMultiTex)
+    bpy.utils.unregister_class(ExportGMSVertexBuffer)
     bpy.types.INFO_MT_file_export.remove(menu_func_export)
 
 
