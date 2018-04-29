@@ -16,7 +16,7 @@ from bpy.types import Object, Operator, PropertyGroup
 import bpy
 import shutil                       # for image file copy
 import json
-from os import path
+from os import path, makedirs
 from os.path import splitext
 from struct import pack, calcsize
 
@@ -126,7 +126,7 @@ def get_byte_data(self,attribs,context,object_selection):
                 if 'material' in map_unique:
                     mat = data.materials[p.material_index]
                     fetch_attribs(map_unique['material'],mat,list)
-                    
+                   
                 for li in p.loop_indices:
                     # First get loop index
                     loop = data.loops[li]
@@ -349,6 +349,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # TODO: per frame, per object, ...
         for frame in result:
             # TODO: create new directory
+            #if not path.exists(directory):
+            #   makedirs(directory)
             
             for obj in frame:
                 # TODO: create new file
@@ -361,11 +363,14 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc = {}
         object_listing = [{ "name":obj.name,
                             "file":path.basename(self.filepath),
+                            "offset":0,                             # TODO!
+                            "no_verts":len(obj.data.polygons)*3,    # Assuming triangulated faces
                             "index":obj.index,
                             "location":obj.location[:],
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:]}
                             for obj in context.selected_objects]
+        desc["format"] = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["objects"] = object_listing
         
         json.dump(desc,f_desc)
