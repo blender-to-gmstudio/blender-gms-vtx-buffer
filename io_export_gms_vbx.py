@@ -370,8 +370,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:]}
                             for obj in context.selected_objects]
-        desc["format"] = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
-        desc["objects"] = object_listing
+                            
+        desc["objects"]   = object_listing
+        desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
+        desc["no_frames"] = context.scene.frame_end-context.scene.frame_start+1
         
         json.dump(desc,f_desc)
         
