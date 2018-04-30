@@ -103,7 +103,9 @@ def get_byte_data(self,attribs,context,object_selection):
     # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
     for obj in object_selection:
+        mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
         data = obj.to_mesh(context.scene,True,'RENDER')
+        obj.modifiers.remove(mod_tri)
         object_info[obj] = len(data.polygons)*3     # Assuming triangulated faces
         bpy.data.meshes.remove(data)
     arr = [{obj.name:bytearray(fmt_size*object_info[obj]) for obj in object_selection} for x in range(frame_count)]
@@ -119,8 +121,14 @@ def get_byte_data(self,attribs,context,object_selection):
         
         # For each object in selection
         for obj in object_selection:
+            # Add a temporary triangulate modifier, to make sure we get triangles
+            mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
+            
             # Generate a mesh with modifiers applied (not transforms!)
             data = obj.to_mesh(context.scene,True,'RENDER')
+            
+            # Remove triangulate modifier
+            obj.modifiers.remove(mod_tri)
             
             # Apply object transform to mesh => not going to happen, since join is meant for this
             
