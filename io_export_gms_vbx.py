@@ -334,6 +334,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Join step
         if self.join_into_active:
             bpy.ops.object.join()
+            object_selection = context.selected_objects
         
         # TODO: transformation and axes step
         
