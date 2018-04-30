@@ -29,7 +29,12 @@ def vec_to_bytes(val):
     """Convert a list of values in range [0,1] to a list of integer values in range [0,255]"""
     return [int(x*255) for x in reversed(val)]
 
+def invert_v(val):
+    """Invert the v coordinate of a (u,v) pair"""
+    return [val[0],1-val[1]]
+
 def vertex_group_ids_to_bitmask(vertex):
+    """Return a bitmask containing the vertex groups a vertex belongs to"""
     list = [x.group for x in vertex.groups]
     masked = 0
     for group in list:
@@ -43,6 +48,9 @@ def vertex_group_ids_to_bitmask(vertex):
 # object_selection is the selection of mesh objects within the current scene
 # that are considered
 def get_byte_data(self,attribs,context,object_selection):
+    # Dictionary to store additional info per object
+    object_info = {}
+    
     # Get objects
     s = context.scene
     
@@ -94,7 +102,11 @@ def get_byte_data(self,attribs,context,object_selection):
 
     # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
-    arr = [{obj.name:bytearray(fmt_size*len(obj.data.polygons)*3) for obj in object_selection} for x in range(frame_count)]
+    for obj in object_selection:
+        data = obj.to_mesh(context.scene,True,'RENDER')
+        object_info[obj] = len(data.polygons)*3     # Assuming triangulated faces
+        bpy.data.meshes.remove(data)
+    arr = [{obj.name:bytearray(fmt_size*object_info[obj]) for obj in object_selection} for x in range(frame_count)]
 
     # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
     list = [0 for i in attribs]
@@ -154,8 +166,11 @@ def get_byte_data(self,attribs,context,object_selection):
                     arr[i+0][obj.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
                     arr[i-1][obj.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
                     offset_index[obj] = offset_index[obj] + 1
+            
+            # Remove the mesh
+            bpy.data.meshes.remove(data)
         
-    return arr
+    return object_info, arr
 
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
@@ -236,11 +251,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         )
     )
     
-    invert_uvs = BoolProperty(
-        name="Invert UV's",
-        description="Whether to invert UV's v (i.e. y) coordinate, i.e. (u,v) becomes (u,1-v)"
-    )
-    
     handedness = EnumProperty(
         name="Handedness",
         description="Handedness of the coordinate system to be used",
@@ -297,7 +307,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         box.label("Transforms:")
         
-        box.prop(self,'invert_uvs')
         box.prop(self,'handedness')
         
         box = layout.box()
@@ -342,7 +351,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
         # Now execute
-        result = get_byte_data(self,attribs,context,object_selection)
+        object_info, result = get_byte_data(self,attribs,context,object_selection)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
         f = open(self.filepath,"wb")
@@ -361,17 +370,15 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         f_desc = open(root + ".json","w")
         
         desc = {}
-        object_listing = [{ "name":obj.name,
+        desc["objects"]   = [{ "name":obj.name,
                             "file":path.basename(self.filepath),
                             "offset":0,                             # TODO!
-                            "no_verts":len(obj.data.polygons)*3,    # Assuming triangulated faces
+                            "no_verts":object_info[obj],
                             "index":obj.index,
                             "location":obj.location[:],
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:]}
                             for obj in context.selected_objects]
-                            
-        desc["objects"]   = object_listing
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = context.scene.frame_end-context.scene.frame_start+1
         
