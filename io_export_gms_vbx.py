@@ -58,15 +58,11 @@ def get_byte_data(self,attribs,context,object_selection):
     # and place them at appropriate indexes in list
     def fetch_attribs(attr,ref,list):
         for attrib in attr:
-            fmt = attr[attrib]['fmt']
-            indices = attr[attrib]['pos']
+            fmt, indices = attr[attrib]['fmt'], attr[attrib]['pos']
             val = getattr(ref,attrib)
             if 'func' in attr[attrib]:
                 val = attr[attrib]['func'](val)
-            if len(fmt) == 1:
-                val_bin = pack(fmt,val)
-            else:
-                val_bin = pack(fmt,*val)
+            val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
             for j in indices:
                 list[j] = val_bin
     
@@ -89,12 +85,8 @@ def get_byte_data(self,attribs,context,object_selection):
 
     # (TODO: perform dummy pass through object data to dynamically determine format (see lines below))
     # Note: current code is sufficient at the moment
-    fmt_cur = ''
-    for a in attribs[:lerp_start]:      # Current attribs format
-        fmt_cur += a[2]['fmt']
-    fmt = ''
-    for a in attribs:                   # All attribs format
-        fmt += a[2]['fmt']
+    fmt_cur = ''.join([a[2]['fmt'] for a in attribs[:lerp_start]])  # Current attribs format
+    fmt     = ''.join([a[2]['fmt'] for a in attribs])               # All attribs format
     fmt_cur_size = calcsize(fmt_cur)
     fmt_size = calcsize(fmt)
     
@@ -325,8 +317,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         box.prop(self,'split_by_material')
 
     def execute(self, context):
+        # Prepare a bit
         root, ext = splitext(self.filepath)
-        object_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         # TODO: preparation step
         
@@ -334,7 +326,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Join step
         if self.join_into_active:
             bpy.ops.object.join()
-            object_selection = context.selected_objects
         
         # TODO: transformation and axes step
         
@@ -343,6 +334,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # TODO: only useful when combined with join
         if self.split_by_material:
             bpy.ops.mesh.separate(type='MATERIAL')
+        
+        object_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.index = bpy.props.IntProperty()    # Each instance now has an index!
@@ -387,7 +380,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "location":obj.location[:],
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:]}
-                            for obj in context.selected_objects]
+                            for obj in context.selected_objects]    # BUG: no_verts doesn't work for e.g. cameras...
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = context.scene.frame_end-context.scene.frame_start+1
         
