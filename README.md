@@ -11,10 +11,28 @@ This exporter supports multiple materials and is meant for all kinds of models.
   * Nice-to-have: skeletons
   * Morphs & per-frame stuff, including interpolation (Done)
 ## Installing the plugin in Blender
-
+* In Blender, go to `File` > `User Preferences`
+* Go to tab `Add-ons` and select `Install from File...`
+* Navigate to the directory that contains the file `io_export_gms_vbx.py`
+* Confirm
+* Next tick the checkbox next to `Import-Export: Export GM:Studio Vertex Buffer`
+* Click `Save User Settings`
+* The plugin is now ready to be used
 ## Installing the presets
 * Copy all the included .py files to the directory `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.78\scripts\presets\operator\export_scene.gms_vbx\`
+* Replace 2.78 by your Blender version if you're using a different version
 ## Usage
-* Select one or more object(s) that you want to export
+* Select one or more objects that you want to export
 * Export using a custom defined format or using a format that comes with an export preset
 * Load the vertex buffer in GM:Studio
+### Static scenery
+This preset can be used to export static scenery using a lightweight vertex format.
+
+### Batched scenery
+This preset can be used to export a batch of models where each vertex is tagged with an object index.
+Each individual model can later be transformed using a matrix shader uniform.
+
+### Morph animations
+This preset can be used to export a full animation.
+Each batch is a combination of the current frame and the next frame.
+Position and normal values can be interpolated in the shader.
