@@ -83,8 +83,7 @@ def get_byte_data(self,attribs,context,object_selection):
     for i, a in enumerate(attribs):
         map_unique[a[0]][a[1]]['pos'].append(i)
 
-    # (TODO: perform dummy pass through object data to dynamically determine format (see lines below))
-    # Note: current code is sufficient at the moment
+    # Get format strings and sizes
     fmt_cur = ''.join([a[2]['fmt'] for a in attribs[:lerp_start]])  # Current attribs format
     fmt     = ''.join([a[2]['fmt'] for a in attribs])               # All attribs format
     fmt_cur_size = calcsize(fmt_cur)
@@ -128,6 +127,10 @@ def get_byte_data(self,attribs,context,object_selection):
             if 'object' in map_unique:
                 fetch_attribs(map_unique['object'],obj,list)
             
+            # Go through materials and textures, to see what is supported and what not
+            #data.materials[0].texture_slots[0].texture_coords == 'UV'
+            #data.materials[0].texture_slots[0].uv_layer # name of uv layer
+            
             uvs = data.uv_layers.active.data    # TODO: handle case where object/mesh has no uv maps
             
             offset_index[obj] = 0   # Counter for offsets in bytearrays
@@ -170,7 +173,7 @@ def get_byte_data(self,attribs,context,object_selection):
             # Remove the mesh
             bpy.data.meshes.remove(data)
         
-    return object_info, arr
+    return object_info, frame_count, arr
 
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
@@ -353,7 +356,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
         # Now execute
-        object_info, result = get_byte_data(self,attribs,context,object_selection)
+        object_info, frame_count, result = get_byte_data(self,attribs,context,object_selection)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
         f = open(self.filepath,"wb")
@@ -382,7 +385,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "scale":obj.scale[:]}
                             for obj in context.selected_objects]    # BUG: no_verts doesn't work for e.g. cameras...
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
-        desc["no_frames"] = context.scene.frame_end-context.scene.frame_start+1
+        desc["no_frames"] = frame_count
         
         json.dump(desc,f_desc)
         
