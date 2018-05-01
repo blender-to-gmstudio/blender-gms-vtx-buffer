@@ -47,6 +47,7 @@ def vertex_group_ids_to_bitmask(vertex):
 # Notes: changes current frame and generates additional, temporary meshes
 # object_selection is the selection of mesh objects within the current scene
 # that are considered
+# TODO: there's no need for this to be a separate function...
 def get_byte_data(self,attribs,context,object_selection):
     # Dictionary to store additional info per object
     object_info = {}
@@ -90,7 +91,7 @@ def get_byte_data(self,attribs,context,object_selection):
     fmt_size = calcsize(fmt)
     
     offset_index = {obj:0 for obj in object_selection}
-
+    
     # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
     frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
     for obj in object_selection:
@@ -100,7 +101,7 @@ def get_byte_data(self,attribs,context,object_selection):
         object_info[obj] = len(data.polygons)*3     # Assuming triangulated faces
         bpy.data.meshes.remove(data)
     arr = [{obj.name:bytearray(fmt_size*object_info[obj]) for obj in object_selection} for x in range(frame_count)]
-
+    
     # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
     list = [0 for i in attribs]
 
@@ -114,16 +115,13 @@ def get_byte_data(self,attribs,context,object_selection):
         for obj in object_selection:
             # Add a temporary triangulate modifier, to make sure we get triangles
             mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
-            
-            # Generate a mesh with modifiers applied (not transforms!)
             data = obj.to_mesh(context.scene,True,'RENDER')
-            
-            # Remove triangulate modifier
             obj.modifiers.remove(mod_tri)
             
             # Apply object transform to mesh => not going to happen, since join is meant for this
             
             # Add object data
+            # TODO: obj.bl_rna.properties
             if 'object' in map_unique:
                 fetch_attribs(map_unique['object'],obj,list)
             
@@ -132,6 +130,7 @@ def get_byte_data(self,attribs,context,object_selection):
             #data.materials[0].texture_slots[0].uv_layer # name of uv layer
             
             uvs = data.uv_layers.active.data    # TODO: handle case where object/mesh has no uv maps
+            #vertex_colors = data.vertex_colors.active.data # TODO: handle case where object/mesh has no vertex colours
             
             offset_index[obj] = 0   # Counter for offsets in bytearrays
             for p in data.polygons:
@@ -153,6 +152,10 @@ def get_byte_data(self,attribs,context,object_selection):
                     uv = uvs[loop.index]
                     if 'uv' in map_unique:
                         fetch_attribs(map_unique['uv'],uv,list)
+                    
+                    # Get vertex colour
+                    #vtx_col = vertex_colors[loop.index]
+                    # Now read the 'color' attribute
                     
                     # Get vertex attributes
                     if 'vertex' in map_unique:
@@ -378,7 +381,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc["objects"]   = [{ "name":obj.name,
                             "file":path.basename(self.filepath),
                             "offset":0,                             # TODO!
-                            "no_verts":object_info[obj],
+                            "no_verts":object_info[obj],            # TODO only applies to mesh data
                             "index":obj.index,
                             "location":obj.location[:],
                             "rotation":obj.rotation_euler[:],
