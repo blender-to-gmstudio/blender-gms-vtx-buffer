@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GM:Studio Vertex Buffer",
     "description": "Vertex buffer exporter for GM:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 6, 0),
+    "version": (0, 7, 0),
     "blender": (2, 78, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -274,6 +274,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         type=bpy.types.AttributeType,
     )
     
+    preparation_step = BoolProperty(
+        name="Preparation Step",
+        default=False,
+        description="Try to make duplicates real and link content from external .blend files"
+    )
+    
     join_into_active = BoolProperty(
         name="Join Into Active",
         default=False,
@@ -323,6 +329,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         box.label("Extras:")
         
+        box.prop(self,'preparation_step')
         box.prop(self,'join_into_active')
         box.prop(self,'split_by_material')
 
@@ -330,8 +337,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Prepare a bit
         root, ext = splitext(self.filepath)
         
-        # TODO: preparation step
-        
+        # Preparation step
+        if self.preparation_step:
+            bpy.ops.object.duplicates_make_real()
+            bpy.ops.object.make_local(type='SELECT_OBDATA') # TODO: also MATERIAL??
+            bpy.ops.object.make_single_user(object=True,obdata=True,material=False,texture=False,animation=False)
+            bpy.ops.object.convert(target='MESH')           # Applies modifiers, etc.
         
         # Join step
         if self.join_into_active:
