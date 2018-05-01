@@ -27,7 +27,7 @@ def float_to_byte(val):
 
 def vec_to_bytes(val):
     """Convert a list of values in range [0,1] to a list of integer values in range [0,255]"""
-    return [int(x*255) for x in reversed(val)]
+    return [int(x*255) for x in val]
 
 def invert_v(val):
     """Invert the v coordinate of a (u,v) pair"""
