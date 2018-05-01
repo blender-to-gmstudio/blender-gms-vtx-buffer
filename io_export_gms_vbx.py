@@ -129,8 +129,11 @@ def get_byte_data(self,attribs,context,object_selection):
             #data.materials[0].texture_slots[0].texture_coords == 'UV'
             #data.materials[0].texture_slots[0].uv_layer # name of uv layer
             
-            uvs = data.uv_layers.active.data    # TODO: handle case where object/mesh has no uv maps
-            #vertex_colors = data.vertex_colors.active.data # TODO: handle case where object/mesh has no vertex colours
+            if 'uv' in map_unique:
+                uvs = data.uv_layers.active.data                # TODO: handle case where object/mesh has no uv maps
+            
+            if 'vertex_color' in map_unique:
+                vertex_colors = data.vertex_colors.active.data  # TODO: handle case where object/mesh has no vertex colours
             
             offset_index[obj] = 0   # Counter for offsets in bytearrays
             for p in data.polygons:
@@ -149,13 +152,14 @@ def get_byte_data(self,attribs,context,object_selection):
                     
                     # Get UV
                     # TODO: get all uv's! (i.e. support multiple texture slots/stages)
-                    uv = uvs[loop.index]
                     if 'uv' in map_unique:
+                        uv = uvs[loop.index]
                         fetch_attribs(map_unique['uv'],uv,list)
                     
                     # Get vertex colour
-                    #vtx_col = vertex_colors[loop.index]
-                    # Now read the 'color' attribute
+                    if 'vertex_color' in map_unique:
+                        vtx_col = vertex_colors[loop.index]
+                        fetch_attribs(map_unique['vertex_color'],vtx_col,list)
                     
                     # Get vertex attributes
                     if 'vertex' in map_unique:
