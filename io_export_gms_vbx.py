@@ -41,147 +41,6 @@ def vertex_group_ids_to_bitmask(vertex):
         masked |= 1 << group
     return masked
 
-# Latest function for getting data from each object in the scene hierarchy
-# Format of return value is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
-# (swap obj and frame to toggle between frame-first and object-first)
-# Notes: changes current frame and generates additional, temporary meshes
-# object_selection is the selection of mesh objects within the current scene
-# that are considered
-# TODO: there's no need for this to be a separate function...
-def get_byte_data(self,attribs,context,object_selection):
-    # Dictionary to store additional info per object
-    object_info = {}
-    
-    # Get objects
-    s = context.scene
-    
-    # Get all attributes from ref, defined in attr
-    # and place them at appropriate indexes in list
-    def fetch_attribs(attr,ref,list):
-        for attrib in attr:
-            fmt, indices = attr[attrib]['fmt'], attr[attrib]['pos']
-            val = getattr(ref,attrib)
-            if 'func' in attr[attrib]:
-                val = attr[attrib]['func'](val)
-            val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
-            for j in indices:
-                list[j] = val_bin
-    
-    #Get all indices in the attributes array that will contain interpolated values
-    lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
-    lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
-
-    # Convert linear list to nested dictionary for easier access while looping
-    map_unique = {}
-    
-    for a in attribs:
-        map_unique[a[0]] = dict()
-    
-    for a in attribs:
-        map_unique[a[0]][a[1]]  = a[2]
-        map_unique[a[0]][a[1]]['pos']  = []
-    
-    for i, a in enumerate(attribs):
-        map_unique[a[0]][a[1]]['pos'].append(i)
-
-    # Get format strings and sizes
-    fmt_cur = ''.join([a[2]['fmt'] for a in attribs[:lerp_start]])  # Current attribs format
-    fmt     = ''.join([a[2]['fmt'] for a in attribs])               # All attribs format
-    fmt_cur_size = calcsize(fmt_cur)
-    fmt_size = calcsize(fmt)
-    
-    offset_index = {obj:0 for obj in object_selection}
-    
-    # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
-    frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
-    for obj in object_selection:
-        mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
-        data = obj.to_mesh(context.scene,True,'RENDER')
-        obj.modifiers.remove(mod_tri)
-        object_info[obj] = len(data.polygons)*3     # Assuming triangulated faces
-        bpy.data.meshes.remove(data)
-    arr = [{obj.name:bytearray(fmt_size*object_info[obj]) for obj in object_selection} for x in range(frame_count)]
-    
-    # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
-    list = [0 for i in attribs]
-
-    for i in range(frame_count):
-        s.frame_set(s.frame_start+i)
-        
-        if 'scene' in map_unique:
-            fetch_attribs(map_unique['scene'],s,list)
-        
-        # For each object in selection
-        for obj in object_selection:
-            # Add a temporary triangulate modifier, to make sure we get triangles
-            mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
-            data = obj.to_mesh(context.scene,True,'RENDER')
-            obj.modifiers.remove(mod_tri)
-            
-            # Apply object transform to mesh => not going to happen, since join is meant for this
-            
-            # Add object data
-            # TODO: obj.bl_rna.properties
-            if 'object' in map_unique:
-                fetch_attribs(map_unique['object'],obj,list)
-            
-            # Go through materials and textures, to see what is supported and what not
-            #data.materials[0].texture_slots[0].texture_coords == 'UV'
-            #data.materials[0].texture_slots[0].uv_layer # name of uv layer
-            
-            if 'uv' in map_unique:
-                uvs = data.uv_layers.active.data                # TODO: handle case where object/mesh has no uv maps
-            
-            if 'vertex_color' in map_unique:
-                vertex_colors = data.vertex_colors.active.data  # TODO: handle case where object/mesh has no vertex colours
-            
-            offset_index[obj] = 0   # Counter for offsets in bytearrays
-            for p in data.polygons:
-                if 'polygon' in map_unique:
-                    fetch_attribs(map_unique['polygon'],p,list)
-                
-                if 'material' in map_unique:
-                    mat = data.materials[p.material_index]
-                    fetch_attribs(map_unique['material'],mat,list)
-                   
-                for li in p.loop_indices:
-                    # First get loop index
-                    loop = data.loops[li]
-                    # Get vertex
-                    v = data.vertices[loop.vertex_index]
-                    
-                    # Get UV
-                    # TODO: get all uv's! (i.e. support multiple texture slots/stages)
-                    if 'uv' in map_unique:
-                        uv = uvs[loop.index]
-                        fetch_attribs(map_unique['uv'],uv,list)
-                    
-                    # Get vertex colour
-                    if 'vertex_color' in map_unique:
-                        vtx_col = vertex_colors[loop.index]
-                        fetch_attribs(map_unique['vertex_color'],vtx_col,list)
-                    
-                    # Get vertex attributes
-                    if 'vertex' in map_unique:
-                        fetch_attribs(map_unique['vertex'],v,list)
-                    
-                    # Now join attribute bytes together
-                    # Remember: interpolated values aren't interpolated yet!
-                    bytes = b''.join(list)
-                    # Index 'calculations'
-                    offset = offset_index[obj] * fmt_size
-                    # Vertex format is always: block of current frame data, block of next frame data
-                    # The below lines copy the current frame bytes to the current frame bytearray for the given object
-                    # and copy the interpolated part of the current frame bytes to the previous frame bytearray for the given object
-                    arr[i+0][obj.name][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
-                    arr[i-1][obj.name][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
-                    offset_index[obj] = offset_index[obj] + 1
-            
-            # Remove the mesh
-            bpy.data.meshes.remove(data)
-        
-    return object_info, frame_count, arr
-
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
     type = bpy.props.StringProperty(name="Type", description="Where to get the data from", default="vertex")
@@ -356,11 +215,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         if self.split_by_material:
             bpy.ops.mesh.separate(type='MATERIAL')
         
-        object_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.index = bpy.props.IntProperty()    # Each instance now has an index!
-        for i, obj in enumerate(object_selection):
+        for i, obj in enumerate(mesh_selection):
             obj.index = i
         
         # First convert the contents of vertex_format to something we can use
@@ -374,9 +233,143 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
         # Now execute
-        object_info, frame_count, result = get_byte_data(self,attribs,context,object_selection)
+        
+        # Format of return value is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
+        
+        # Dictionary to store additional info per object
+        object_info = {}
+        
+        # Get objects
+        s = context.scene
+        
+        # Get all attributes from ref, defined in attr
+        # and place them at appropriate indexes in list
+        def fetch_attribs(attr,ref,list):
+            for attrib in attr:
+                fmt, indices = attr[attrib]['fmt'], attr[attrib]['pos']
+                val = getattr(ref,attrib)
+                if 'func' in attr[attrib]:
+                    val = attr[attrib]['func'](val)
+                val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
+                for j in indices:
+                    list[j] = val_bin
+        
+        #Get all indices in the attributes array that will contain interpolated values
+        lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
+        lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
+
+        # Convert linear list to nested dictionary for easier access while looping
+        map_unique = {}
+        
+        for a in attribs:
+            map_unique[a[0]] = dict()
+        
+        for a in attribs:
+            map_unique[a[0]][a[1]]  = a[2]
+            map_unique[a[0]][a[1]]['pos']  = []
+        
+        for i, a in enumerate(attribs):
+            map_unique[a[0]][a[1]]['pos'].append(i)
+
+        # Get format strings and sizes
+        fmt_cur = ''.join([a[2]['fmt'] for a in attribs[:lerp_start]])  # Current attribs format
+        fmt     = ''.join([a[2]['fmt'] for a in attribs])               # All attribs format
+        fmt_cur_size = calcsize(fmt_cur)
+        fmt_size = calcsize(fmt)
+        
+        offset_index = {obj:0 for obj in mesh_selection}
+        
+        # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
+        frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
+        for obj in mesh_selection:
+            mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
+            data = obj.to_mesh(context.scene,True,'RENDER')
+            obj.modifiers.remove(mod_tri)
+            object_info[obj] = len(data.polygons)*3     # Assuming triangulated faces
+            bpy.data.meshes.remove(data)
+        result = [{obj:bytearray(fmt_size*object_info[obj]) for obj in mesh_selection} for x in range(frame_count)]
+        
+        # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
+        list = [0 for i in attribs]
+
+        for i in range(frame_count):
+            s.frame_set(s.frame_start+i)
+            
+            if 'scene' in map_unique:
+                fetch_attribs(map_unique['scene'],s,list)
+            
+            # For each object in selection
+            for obj in mesh_selection:
+                # Add a temporary triangulate modifier, to make sure we get triangles
+                mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
+                data = obj.to_mesh(context.scene,True,'RENDER')
+                obj.modifiers.remove(mod_tri)
+                
+                # Apply object transform to mesh => not going to happen, since join is meant for this
+                
+                # Add object data
+                # TODO: obj.bl_rna.properties
+                if 'object' in map_unique:
+                    fetch_attribs(map_unique['object'],obj,list)
+                
+                # Go through materials and textures, to see what is supported and what not
+                #data.materials[0].texture_slots[0].texture_coords == 'UV'
+                #data.materials[0].texture_slots[0].uv_layer # name of uv layer
+                
+                if 'uv' in map_unique:
+                    uvs = data.uv_layers.active.data                # TODO: handle case where object/mesh has no uv maps
+                
+                if 'vertex_color' in map_unique:
+                    vertex_colors = data.vertex_colors.active.data  # TODO: handle case where object/mesh has no vertex colours
+                
+                offset_index[obj] = 0   # Counter for offsets in bytearrays
+                for p in data.polygons:
+                    if 'polygon' in map_unique:
+                        fetch_attribs(map_unique['polygon'],p,list)
+                    
+                    if 'material' in map_unique:
+                        mat = data.materials[p.material_index]
+                        fetch_attribs(map_unique['material'],mat,list)
+                       
+                    for li in p.loop_indices:
+                        # First get loop index
+                        loop = data.loops[li]
+                        # Get vertex
+                        v = data.vertices[loop.vertex_index]
+                        
+                        # Get UV
+                        # TODO: get all uv's! (i.e. support multiple texture slots/stages)
+                        if 'uv' in map_unique:
+                            uv = uvs[loop.index]
+                            fetch_attribs(map_unique['uv'],uv,list)
+                        
+                        # Get vertex colour
+                        if 'vertex_color' in map_unique:
+                            vtx_col = vertex_colors[loop.index]
+                            fetch_attribs(map_unique['vertex_color'],vtx_col,list)
+                        
+                        # Get vertex attributes
+                        if 'vertex' in map_unique:
+                            fetch_attribs(map_unique['vertex'],v,list)
+                        
+                        # Now join attribute bytes together
+                        # Remember: interpolated values aren't interpolated yet!
+                        bytes = b''.join(list)
+                        # Index 'calculations'
+                        offset = offset_index[obj] * fmt_size
+                        # Vertex format is always: block of current frame data, block of next frame data
+                        # The below lines copy the current frame bytes to the current frame bytearray for the given object
+                        # and copy the interpolated part of the current frame bytes to the previous frame bytearray for the given object
+                        result[i+0][obj][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                        result[i-1][obj][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
+                        offset_index[obj] = offset_index[obj] + 1
+                
+                # Remove the mesh
+                bpy.data.meshes.remove(data)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
+        offset = 0
+        offset_per_obj = dict()
         f = open(self.filepath,"wb")
         # TODO: per frame, per object, ...
         for frame in result:
@@ -387,7 +380,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             for obj in frame:
                 # TODO: create new file
                 f.write(frame[obj])
+                offset_per_obj[obj] = offset
+                offset += len(frame[obj])
         f.close()
+        
+        print(offset)
         
         # Create JSON file (very basic at the moment...)
         f_desc = open(root + ".json","w")
@@ -395,7 +392,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc = {}
         desc["objects"]   = [{ "name":obj.name,
                             "file":path.basename(self.filepath),
-                            "offset":0,                             # TODO!
+                            "offset":offset_per_obj[obj],
                             "no_verts":object_info[obj],            # TODO only applies to mesh data
                             "index":obj.index,
                             "location":obj.location[:],
@@ -403,7 +400,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "scale":obj.scale[:]}
                             for obj in context.selected_objects]    # BUG: no_verts doesn't work for e.g. cameras...
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
-        desc["no_frames"] = frame_count
+        desc["no_frames"] = frame_count                             # Number of frames that are exported
         
         json.dump(desc,f_desc)
         
