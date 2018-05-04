@@ -384,21 +384,25 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 offset += len(frame[obj])
         f.close()
         
-        print(offset)
-        
         # Create JSON file (very basic at the moment...)
+        # Coming up next: 
+        # for type_collection in [bpy.data.meshes,bpy.data.objects,bpy.data.materials,bpy.data.images,bpy.data.textures,bpy.data.cameras,bpy.data.lamps]:
+        #    [{i:getattr(ins,i) for i in ins.bl_rna.properties.keys()} for ins in type_collection]
         f_desc = open(root + ".json","w")
         
         desc = {}
         desc["objects"]   = [{ "name":obj.name,
+                            "type":obj.type,
                             "file":path.basename(self.filepath),
                             "offset":offset_per_obj[obj],
-                            "no_verts":object_info[obj],            # TODO only applies to mesh data
+                            "no_verts":object_info[obj],            # TODO/BUG only applies to mesh data
                             "index":obj.index,
                             "location":obj.location[:],
                             "rotation":obj.rotation_euler[:],
-                            "scale":obj.scale[:]}
-                            for obj in context.selected_objects]    # BUG: no_verts doesn't work for e.g. cameras...
+                            "scale":obj.scale[:],
+                            "materials":[mat.name for mat in obj.material_slots],
+                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.filepath}
+                            for obj in context.selected_objects]
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         
