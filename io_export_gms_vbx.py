@@ -308,13 +308,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 # Apply object transform to mesh => not going to happen, since join is meant for this
                 
                 # Add object data
-                # TODO: obj.bl_rna.properties
+                # TODO: obj.bl_rna.properties, bpy.types, ...
                 if 'object' in map_unique:
                     fetch_attribs(map_unique['object'],obj,list)
-                
-                # Go through materials and textures, to see what is supported and what not
-                #data.materials[0].texture_slots[0].texture_coords == 'UV'
-                #data.materials[0].texture_slots[0].uv_layer # name of uv layer
                 
                 if 'uv' in map_unique:
                     uvs = data.uv_layers.active.data                # TODO: handle case where object/mesh has no uv maps
@@ -340,7 +336,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                         # Get UV
                         # TODO: get all uv's! (i.e. support multiple texture slots/stages)
                         if 'uv' in map_unique:
-                            uv = uvs[loop.index]
+                            for slot in [x for x in mat.texture_slots if x != None and x.texture_coords == 'UV']:
+                                if slot.uv_layer == '':
+                                    uv = uvs[loop.index]                # Use default uv layer
+                                else:
+                                    uv = data.uv_layers[slot.uv_layer]  # Use the given uv layer
+                            
                             fetch_attribs(map_unique['uv'],uv,list)
                         
                         # Get vertex colour
@@ -388,8 +389,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Coming up next: 
         # for type_collection in [bpy.data.meshes,bpy.data.objects,bpy.data.materials,bpy.data.images,bpy.data.textures,bpy.data.cameras,bpy.data.lamps]:
         #    [{i:getattr(ins,i) for i in ins.bl_rna.properties.keys()} for ins in type_collection]
-        f_desc = open(root + ".json","w")
         
+        # TODO: either add extra info as a header to the binary format or as external JSON file
         desc = {}
         desc["objects"]   = [{ "name":obj.name,
                             "type":obj.type,
@@ -401,10 +402,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:],
                             "materials":[mat.name for mat in obj.material_slots],
-                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.filepath}
+                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name}
                             for obj in context.selected_objects]
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
+        
+        f_desc = open(root + ".json","w")
         
         json.dump(desc,f_desc)
         
