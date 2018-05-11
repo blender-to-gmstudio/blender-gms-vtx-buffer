@@ -17,7 +17,7 @@ import bpy
 import shutil                       # for image file copy
 import json
 from os import path, makedirs
-from os.path import splitext
+from os.path import splitext, split
 from struct import pack, calcsize
 
 # Conversion functions (go into the globals() dictionary for now...)
@@ -195,6 +195,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     def execute(self, context):
         # Prepare a bit
         root, ext = splitext(self.filepath)
+        base, fname = split(self.filepath)
         
         # Preparation step
         if self.preparation_step:
@@ -290,8 +291,13 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         result = [{obj:bytearray(fmt_size*object_info[obj]) for obj in mesh_selection} for x in range(frame_count)]
         
         # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
-        list = [0 for i in attribs]
-
+        # Initialize each item with a null byte sequence of the appropriate length
+        list = []
+        for i in attribs:
+            fmt = i[2]['fmt']
+            list.append(pack(fmt,*([0]*len(fmt))))
+        
+        # Loop through scene frames
         for i in range(frame_count):
             s.frame_set(s.frame_start+i)
             
@@ -323,8 +329,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     if 'polygon' in map_unique:
                         fetch_attribs(map_unique['polygon'],p,list)
                     
+                    mat = data.materials[p.material_index]
                     if 'material' in map_unique:
-                        mat = data.materials[p.material_index]
                         fetch_attribs(map_unique['material'],mat,list)
                        
                     for li in p.loop_indices:
@@ -336,13 +342,15 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                         # Get UV
                         # TODO: get all uv's! (i.e. support multiple texture slots/stages)
                         if 'uv' in map_unique:
+                            uv = None
                             for slot in [x for x in mat.texture_slots if x != None and x.texture_coords == 'UV']:
                                 if slot.uv_layer == '':
-                                    uv = uvs[loop.index]                # Use default uv layer
+                                    uv = uvs[loop.index]                                # Use default uv layer
                                 else:
-                                    uv = data.uv_layers[slot.uv_layer]  # Use the given uv layer
+                                    uv = data.uv_layers[slot.uv_layer].data[loop.index] # Use the given uv layer
                             
-                            fetch_attribs(map_unique['uv'],uv,list)
+                            if uv != None:
+                                fetch_attribs(map_unique['uv'],uv,list)
                         
                         # Get vertex colour
                         if 'vertex_color' in map_unique:
@@ -392,7 +400,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         # TODO: either add extra info as a header to the binary format or as external JSON file
         desc = {}
-        desc["objects"]   = [{ "name":obj.name,
+        desc["objects"]   = [{
+                            "name":obj.name,
                             "type":obj.type,
                             "file":path.basename(self.filepath),
                             "offset":offset_per_obj[obj],
@@ -402,10 +411,19 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:],
                             "materials":[mat.name for mat in obj.material_slots],
-                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name}
+                            "alpha": obj.material_slots[0].material.alpha,
+                            "diffuse_color": obj.material_slots[0].material.diffuse_color[:],
+                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name if obj.material_slots[0].material.texture_slots[0] != None else "" # Yuck...
+                            }
                             for obj in context.selected_objects]
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
+        
+        for obj in context.selected_objects:
+            tex_slot = obj.material_slots[0].material.texture_slots[0]
+            if tex_slot != None:
+                image = tex_slot.texture.image
+                image.save_render(base + '/' + image.name,context.scene)
         
         f_desc = open(root + ".json","w")
         
