@@ -33,6 +33,10 @@ def invert_v(val):
     """Invert the v coordinate of a (u,v) pair"""
     return [val[0],1-val[1]]
 
+def invert_y(val):
+    """Invert the y coordinate of a vector"""
+    return [val[0],-val[1],val[2]]
+
 def vertex_group_ids_to_bitmask(vertex):
     """Return a bitmask containing the vertex groups a vertex belongs to"""
     list = [x.group for x in vertex.groups]
