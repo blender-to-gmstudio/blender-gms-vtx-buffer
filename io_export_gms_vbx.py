@@ -105,6 +105,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         description="Only export objects that are currently selected",
     )
     
+    reverse_loop = BoolProperty(
+        name="Reverse Loop",
+        default=False,
+        description="Reverse looping through triangle indices",
+    )
+    
     frame_option = EnumProperty(
         name="Frame",
         description="Which frames to export",
@@ -187,6 +193,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         box.label("Transforms:")
         
         box.prop(self,'handedness')
+        box.prop(self,'reverse_loop')
         
         box = layout.box()
         
@@ -336,8 +343,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     mat = data.materials[p.material_index]
                     if 'material' in map_unique:
                         fetch_attribs(map_unique['material'],mat,list)
-                       
-                    for li in p.loop_indices:
+                    
+                    if self.reverse_loop:
+                        iter = reversed(p.loop_indices)
+                    else:
+                        iter = p.loop_indices
+                    for li in iter:
                         # First get loop index
                         loop = data.loops[li]
                         # Get vertex
