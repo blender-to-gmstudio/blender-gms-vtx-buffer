@@ -161,6 +161,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         description="Whether to split joined mesh by material after joining",
     )
     
+    export_textures = BoolProperty(
+        name="Export Textures",
+        default=True,
+        description="Export texture images to same directory as result file",
+    )
+    
     def draw(self, context):
         layout = self.layout
         
@@ -202,6 +208,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         box.prop(self,'preparation_step')
         box.prop(self,'join_into_active')
         box.prop(self,'split_by_material')
+        box.prop(self,'export_textures')
 
     def execute(self, context):
         # Prepare a bit
@@ -434,11 +441,13 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         
-        for obj in context.selected_objects:
-            tex_slot = obj.material_slots[0].material.texture_slots[0]
-            if tex_slot != None:
-                image = tex_slot.texture.image
-                image.save_render(base + '/' + image.name,context.scene)
+        # Save textures
+        if self.export_textures:
+            for obj in context.selected_objects:
+                tex_slot = obj.material_slots[0].material.texture_slots[0]
+                if tex_slot != None:
+                    image = tex_slot.texture.image
+                    image.save_render(base + '/' + image.name,context.scene)
         
         f_desc = open(root + ".json","w")
         
