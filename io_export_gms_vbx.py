@@ -133,8 +133,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     handedness = EnumProperty(
         name="Handedness",
         description="Handedness of the coordinate system to be used",
-        items=(('r',"Right handed",""),
-               ('l',"Left handed",""),
+        items=(('rh',"Right handed",""),
+               ('lh',"Left handed",""),
         )
     )
     
@@ -358,6 +358,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     for li in iter:
                         # First get loop index
                         loop = data.loops[li]
+                        
+                        # Get loop attributes
+                        if 'loop' in map_unique:
+                            fetch_attribs(map_unique['loop'],loop,list)
+                        
                         # Get vertex
                         v = data.vertices[loop.vertex_index]
                         
@@ -427,9 +432,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "type":obj.type,
                             "file":path.basename(self.filepath),
                             "offset":offset_per_obj[obj],
-                            "no_verts":object_info[obj],            # TODO/BUG only applies to mesh data
+                            "no_verts":object_info[obj],
                             "index":obj.index,
-                            "location":obj.location[:],
+                            "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:],
                             "materials":[mat.name for mat in obj.material_slots],
@@ -437,13 +442,39 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "diffuse_color": obj.material_slots[0].material.diffuse_color[:],
                             "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name if obj.material_slots[0].material.texture_slots[0] != None else "" # Yuck...
                             }
-                            for obj in context.selected_objects]
+                            for obj in mesh_selection]
+        cameras = [{
+            "name":obj.name,
+            "type":obj.type,
+            "location":obj.location[:],
+            "rotation":obj.rotation_euler[:],
+            "scale":obj.scale[:],
+            "angle":obj.data.angle,
+            "clip_start":obj.data.clip_start,
+            "clip_end":obj.data.clip_end,
+            "cam_type":obj.data.type
+        }
+        for obj in context.selected_objects if obj.type == 'CAMERA']
+        lamps = [{
+            "name":obj.name,
+            "type":obj.type,
+            "location":obj.location[:],
+            "rotation":obj.rotation_euler[:],
+            "scale":obj.scale[:],
+            "lamp_type":obj.data.type,
+            "use_diffuse":obj.data.use_diffuse,
+            "use_specular":obj.data.use_specular,
+            "energy":obj.data.energy
+        }
+        for obj in context.selected_objects if obj.type == 'LAMP']
+        desc["objects"].extend(cameras)
+        desc["objects"].extend(lamps)
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         
         # Save textures
         if self.export_textures:
-            for obj in context.selected_objects:
+            for obj in mesh_selection:                              # Only mesh objects have texture slots
                 tex_slot = obj.material_slots[0].material.texture_slots[0]
                 if tex_slot != None:
                     image = tex_slot.texture.image
