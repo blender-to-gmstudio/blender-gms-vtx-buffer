@@ -467,8 +467,35 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             "energy":obj.data.energy
         }
         for obj in context.selected_objects if obj.type == 'LAMP']
+        speakers = [{
+            "name":obj.name,
+            "type":obj.type,
+            "location":obj.location[:],
+            "rotation":obj.rotation_euler[:],
+            "scale":obj.scale[:],
+            "volume":obj.data.volume,
+            "pitch":obj.data.pitch,
+            "volume_min":obj.data.volume_min,
+            "volume_max":obj.data.volume_max,
+            "attenuation":obj.data.attenuation,
+            "distance_max":obj.data.distance_max,
+            "distance_reference":obj.data.distance_reference
+        }
+        for obj in context.selected_objects if obj.type == 'SPEAKER']
+        emptys = [{
+            "name":obj.name,
+            "type":obj.type,
+            "location":obj.location[:],
+            "rotation":obj.rotation_euler[:],
+            "scale":obj.scale[:],
+            "dupli_type":obj.dupli_type,
+            "dupli_group":obj.dupli_group
+        }
+        for obj in context.selected_objects if obj.type == 'EMPTY']
         desc["objects"].extend(cameras)
         desc["objects"].extend(lamps)
+        desc["objects"].extend(speakers)
+        desc["objects"].extend(emptys)
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         
