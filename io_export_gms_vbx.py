@@ -45,10 +45,24 @@ def vertex_group_ids_to_bitmask(vertex):
         masked |= 1 << group
     return masked
 
+# Currently supported attribute sources, maintained manually at the moment
+supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
+source_items = []
+for src in supported_sources:
+    id = getattr(bpy.types,src)
+    rna = id.bl_rna
+    source_items.append((rna.identifier,rna.name,rna.description))
+
+def test_cb(self,context):
+    props = getattr(bpy.types,self.type).bl_rna.properties
+    items = [(p.identifier,p.name,p.description) for p in props]
+    
+    return items
+
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
-    type = bpy.props.StringProperty(name="Type", description="Where to get the data from", default="MeshVertex")
-    attr = bpy.props.StringProperty(name="Attribute", description="Which attribute to get", default="co")
+    type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items)
+    attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value", default=False)
     func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="")
