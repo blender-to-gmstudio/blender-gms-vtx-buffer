@@ -47,7 +47,7 @@ def vertex_group_ids_to_bitmask(vertex):
 
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
-    type = bpy.props.StringProperty(name="Type", description="Where to get the data from", default="vertex")
+    type = bpy.props.StringProperty(name="Type", description="Where to get the data from", default="MeshVertex")
     attr = bpy.props.StringProperty(name="Attribute", description="Which attribute to get", default="co")
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value", default=False)
@@ -319,8 +319,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         for i in range(frame_count):
             s.frame_set(s.frame_start+i)
             
-            if 'scene' in map_unique:
-                fetch_attribs(map_unique['scene'],s,list)
+            if 'Scene' in map_unique:
+                fetch_attribs(map_unique['Scene'],s,list)
             
             # For each object in selection
             for obj in mesh_selection:
@@ -333,23 +333,23 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 
                 # Add object data
                 # TODO: obj.bl_rna.properties, bpy.types, ...
-                if 'object' in map_unique:
-                    fetch_attribs(map_unique['object'],obj,list)
+                if 'Object' in map_unique:
+                    fetch_attribs(map_unique['Object'],obj,list)
                 
-                if 'uv' in map_unique:
+                if 'MeshUVLoop' in map_unique:
                     uvs = data.uv_layers.active.data                # TODO: handle case where object/mesh has no uv maps
                 
-                if 'vertex_color' in map_unique:
+                if 'MeshLoopColor' in map_unique:
                     vertex_colors = data.vertex_colors.active.data  # TODO: handle case where object/mesh has no vertex colours
                 
                 offset_index[obj] = 0   # Counter for offsets in bytearrays
                 for p in data.polygons:
-                    if 'polygon' in map_unique:
-                        fetch_attribs(map_unique['polygon'],p,list)
+                    if 'MeshPolygon' in map_unique:
+                        fetch_attribs(map_unique['MeshPolygon'],p,list)
                     
                     mat = data.materials[p.material_index]
-                    if 'material' in map_unique:
-                        fetch_attribs(map_unique['material'],mat,list)
+                    if 'Material' in map_unique:
+                        fetch_attribs(map_unique['Material'],mat,list)
                     
                     if self.reverse_loop:
                         iter = reversed(p.loop_indices)
@@ -360,15 +360,15 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                         loop = data.loops[li]
                         
                         # Get loop attributes
-                        if 'loop' in map_unique:
-                            fetch_attribs(map_unique['loop'],loop,list)
+                        if 'MeshLoop' in map_unique:
+                            fetch_attribs(map_unique['MeshLoop'],loop,list)
                         
                         # Get vertex
                         v = data.vertices[loop.vertex_index]
                         
                         # Get UV
                         # TODO: get all uv's! (i.e. support multiple texture slots/stages)
-                        if 'uv' in map_unique:
+                        if 'MeshUVLoop' in map_unique:
                             uv = None
                             for slot in [x for x in mat.texture_slots if x != None and x.texture_coords == 'UV']:
                                 if slot.uv_layer == '':
@@ -377,16 +377,16 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                                     uv = data.uv_layers[slot.uv_layer].data[loop.index] # Use the given uv layer
                             
                             if uv != None:
-                                fetch_attribs(map_unique['uv'],uv,list)
+                                fetch_attribs(map_unique['MeshUVLoop'],uv,list)
                         
                         # Get vertex colour
-                        if 'vertex_color' in map_unique:
+                        if 'MeshLoopColor' in map_unique:
                             vtx_col = vertex_colors[loop.index]
-                            fetch_attribs(map_unique['vertex_color'],vtx_col,list)
+                            fetch_attribs(map_unique['MeshLoopColor'],vtx_col,list)
                         
                         # Get vertex attributes
-                        if 'vertex' in map_unique:
-                            fetch_attribs(map_unique['vertex'],v,list)
+                        if 'MeshVertex' in map_unique:
+                            fetch_attribs(map_unique['MeshVertex'],v,list)
                         
                         # Now join attribute bytes together
                         # Remember: interpolated values aren't interpolated yet!
