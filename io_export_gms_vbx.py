@@ -85,7 +85,7 @@ class RemoveAttributeOperator(Operator):
     bl_label = "Remove Vertex Attribute"
     
     id = bpy.props.IntProperty()
-
+    
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
         context.active_operator.vertex_format.remove(self.id)
@@ -225,6 +225,18 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         box.prop(self,'export_textures')
 
     def execute(self, context):
+        # Get all attributes from ref, defined in attr
+        # and place them at appropriate indexes in list
+        def fetch_attribs(attr,ref,list):
+            for attrib in attr:
+                fmt, indices = attr[attrib]['fmt'], attr[attrib]['pos']
+                val = getattr(ref,attrib)
+                if 'func' in attr[attrib]:
+                    val = attr[attrib]['func'](val)
+                val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
+                for j in indices:
+                    list[j] = val_bin
+        
         # Prepare a bit
         root, ext = splitext(self.filepath)
         base, fname = split(self.filepath)
@@ -254,7 +266,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         for i, obj in enumerate(mesh_selection):
             obj.index = i
         
+        # << Prepare a structure to map vertex attributes to the actual contents >>
+        
         # First convert the contents of vertex_format to something we can use
+        # TODO: support collections
         attribs = []
         for i in self.vertex_format:
             if i.func == '':
@@ -264,27 +279,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 # Important: a "bound method" is something different than a function and passes the 'self' as an additional parameter!
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
-        # Now execute
-        
-        # Format of return value is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
-        
-        # Dictionary to store additional info per object
-        object_info = {}
-        
-        # Get objects
-        s = context.scene
-        
-        # Get all attributes from ref, defined in attr
-        # and place them at appropriate indexes in list
-        def fetch_attribs(attr,ref,list):
-            for attrib in attr:
-                fmt, indices = attr[attrib]['fmt'], attr[attrib]['pos']
-                val = getattr(ref,attrib)
-                if 'func' in attr[attrib]:
-                    val = attr[attrib]['func'](val)
-                val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
-                for j in indices:
-                    list[j] = val_bin
+        print(attribs)
         
         #Get all indices in the attributes array that will contain interpolated values
         lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
@@ -302,12 +297,26 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         for i, a in enumerate(attribs):
             map_unique[a[0]][a[1]]['pos'].append(i)
+        
+        print(map_unique)
 
         # Get format strings and sizes
         fmt_cur = ''.join([a[2]['fmt'] for a in attribs[:lerp_start]])  # Current attribs format
         fmt     = ''.join([a[2]['fmt'] for a in attribs])               # All attribs format
         fmt_cur_size = calcsize(fmt_cur)
         fmt_size = calcsize(fmt)
+        
+        # << End of preparation of structure >>
+        
+        # << Now execute >>
+        
+        # Format of return value is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
+        
+        # Dictionary to store additional info per object
+        object_info = {}
+        
+        # Get objects
+        s = context.scene
         
         offset_index = {obj:0 for obj in mesh_selection}
         
