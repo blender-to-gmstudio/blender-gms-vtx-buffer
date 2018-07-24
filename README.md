@@ -8,8 +8,18 @@ This exporter supports multiple materials and is meant for all kinds of models.
   * Customizable vertex format (Done)
   * Static scenery (Done)
   * Dynamic scenery (mesh data + offset per mesh/object in json file)
-  * Nice-to-have: skeletons
+  * Nice-to-have: skeletons (i.e. armatures) => WIP
   * Morphs & per-frame stuff, including interpolation (Done)
+  * Vertex formats per object
+  * Extensive mapping of Blender data blocks to GameMaker functionality:
+    * Scene => Room
+    * Camera => Camera
+    * Curve => Path
+    * Speaker => Audio emitter
+    * Render Layer => Layer
+    * Mesh Object => Instance (of some kind of model object)
+  * Top-down render of objects for easy viewing in a top-down 2D editor (using a left-handed coordinate system)
+  * A clean way to invert axes for both objects and mesh data
 ## Installing the plugin in Blender
 * In Blender, go to `File` > `User Preferences`
 * Go to tab `Add-ons` and select `Install from File...`
