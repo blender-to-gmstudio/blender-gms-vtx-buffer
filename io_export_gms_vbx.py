@@ -46,7 +46,7 @@ def vertex_group_ids_to_bitmask(vertex):
     return masked
 
 # Currently supported attribute sources, maintained manually at the moment
-supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
+supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
 source_items = []
 for src in supported_sources:
     id = getattr(bpy.types,src)
@@ -244,7 +244,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         
         # Split by material
-        # TODO: only useful when combined with join
         if self.split_by_material:
             bpy.ops.mesh.separate(type='MATERIAL')
         
@@ -380,6 +379,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                         # Get vertex
                         v = data.vertices[loop.vertex_index]
                         
+                        # Get vertex group stuff
+                        if 'VertexGroupElement' in map_unique:
+                            g = v.groups[0]     # TESTING Single vertex group
+                            fetch_attribs(map_unique['VertexGroupElement'],g,list)
+                        
                         # Get UV
                         # TODO: get all uv's! (i.e. support multiple texture slots/stages)
                         if 'MeshUVLoop' in map_unique:
@@ -454,7 +458,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "materials":[mat.name for mat in obj.material_slots],
                             "alpha": obj.material_slots[0].material.alpha,
                             "diffuse_color": obj.material_slots[0].material.diffuse_color[:],
-                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name if obj.material_slots[0].material.texture_slots[0] != None else "" # Yuck...
+                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name if obj.material_slots[0].material.texture_slots[0] != None else "", # Yuck...
+                            "vertex_groups":[vg.name for vg in obj.vertex_groups]
                             }
                             for obj in mesh_selection]
         cameras = [{
@@ -506,10 +511,19 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             "dupli_group":obj.dupli_group
         }
         for obj in context.selected_objects if obj.type == 'EMPTY']
+        armatures = [{
+            "name":obj.name,
+            "type":obj.type,
+            "location":obj.location[:],
+            "rotation":obj.rotation_euler[:],
+            "scale":obj.scale[:]
+        }
+        for obj in context.selected_objects if obj.type == 'ARMATURE']
         desc["objects"].extend(cameras)
         desc["objects"].extend(lamps)
         desc["objects"].extend(speakers)
         desc["objects"].extend(emptys)
+        desc["objects"].extend(armatures)
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         
