@@ -46,7 +46,7 @@ def vertex_group_ids_to_bitmask(vertex):
     return masked
 
 # Currently supported attribute sources, maintained manually at the moment
-supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
+supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','ShapeKeyPoint','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
 source_items = []
 for src in supported_sources:
     id = getattr(bpy.types,src)
@@ -64,7 +64,7 @@ class AttributeType(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items)
     attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
-    int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value", default=False)
+    int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value (value in next frame)", default=False)
     func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="")
 
 # Operators to get the vertex format customization add/remove to work
@@ -281,10 +281,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         print(attribs)
         
-        #Get all indices in the attributes array that will contain interpolated values
-        lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
-        lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
-
+        attribs2 = [{(i.type,i.attr):{'fmt':i.fmt,'func':globals()[i.func] if i.func != '' else '','int':i.int}} for i in self.vertex_format]
+        print(attribs2)
+        
+        lerp_mask = [x.int for x in self.vertex_format]
+        print(lerp_mask)
+        
         # Convert linear list to nested dictionary for easier access while looping
         map_unique = {}
         
@@ -299,6 +301,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             map_unique[a[0]][a[1]]['pos'].append(i)
         
         print(map_unique)
+        
+        #Get all indices in the attributes array that will contain interpolated values
+        lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
+        lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
 
         # Get format strings and sizes
         fmt_cur = ''.join([a[2]['fmt'] for a in attribs[:lerp_start]])  # Current attribs format
@@ -378,7 +384,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     else:
                         iter = p.loop_indices
                     for li in iter:
-                        # First get loop index
                         loop = data.loops[li]
                         
                         # Get loop attributes
@@ -411,6 +416,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             vtx_col = vertex_colors[loop.index]
                             fetch_attribs(map_unique['MeshLoopColor'],vtx_col,list)
                         
+                        # Get shape key coordinates
+                        if 'ShapeKeyPoint' in map_unique:
+                            kbs = data.shape_keys.key_blocks
+                            for kb in kbs:
+                                fetch_attribs(map_unique['ShapeKeyPoint'],kb.data,list)
+                        
                         # Get vertex attributes
                         if 'MeshVertex' in map_unique:
                             fetch_attribs(map_unique['MeshVertex'],v,list)
@@ -423,7 +434,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                         # Vertex format is always: block of current frame data, block of next frame data
                         # The below lines copy the current frame bytes to the current frame bytearray for the given object
                         # and copy the interpolated part of the current frame bytes to the previous frame bytearray for the given object
-                        result[i+0][obj][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
+                        result[i-0][obj][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
                         result[i-1][obj][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
                         offset_index[obj] = offset_index[obj] + 1
                 
