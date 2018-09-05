@@ -546,6 +546,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc["objects"].extend(armatures)
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
+        desc["materials"] = [mat.name for mat in bpy.data.materials]
         
         # Save textures
         if self.export_textures:
