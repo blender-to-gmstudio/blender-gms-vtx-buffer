@@ -1,4 +1,4 @@
-# Blender to GameMaker:Studio Vertex Buffer Exporter
+# Blender to GameMaker:Studio Exporter
 This exporter supports multiple materials and is meant for all kinds of models.
 ## Description / Planned features
 * Generates one or more files with vertex buffer contents
