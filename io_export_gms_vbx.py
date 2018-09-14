@@ -59,6 +59,28 @@ def test_cb(self,context):
     
     return items
 
+# Stuff to export physics
+physics_props = {'angular_damping','collision_shape','enabled','friction','kinematic','linear_damping','mass','restitution','type'}
+def object_physics_to_json(obj):
+    b = obj.rigid_body
+    
+    if b == None:
+        return {}
+    
+    physics_settings = {x:b.path_resolve(x) for x in physics_props}
+    physics_settings['collision_group'] = [i for i, x in enumerate(b.collision_groups) if x == True][0]
+    
+    # Get reference to object data
+    d = obj.data
+    
+    # Select the necessary stuff (single face loop)
+    for poly in d.polygons:
+        vtx_indices = [d.loops[x].vertex_index for x in poly.loop_indices]
+        ordered_verts = [d.vertices[x].co.xy[:] for x in vtx_indices]
+        physics_settings['coords'] = ordered_verts
+    
+    return physics_settings
+
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items)
@@ -479,7 +501,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "alpha": obj.material_slots[0].material.alpha,
                             "diffuse_color": obj.material_slots[0].material.diffuse_color[:],
                             "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name if obj.material_slots[0].material.texture_slots[0] != None else "", # Yuck...
-                            "vertex_groups":[vg.name for vg in obj.vertex_groups]
+                            "vertex_groups":[vg.name for vg in obj.vertex_groups],
+                            "physics":object_physics_to_json(obj)
                             }
                             for obj in mesh_selection]
         cameras = [{
