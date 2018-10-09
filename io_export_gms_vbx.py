@@ -125,6 +125,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     bl_idname = "export_scene.gms_vbx" # important since its how bpy.ops.export_scene.gms_vbx is constructed
     bl_label = "Export GM:Studio Vertex Buffer"
     bl_options = {'PRESET'}                 # Allow presets of exporter configurations
+    
+    def __init__(self):
+        # Blender Python trickery: dynamic addition of an index variable to the class
+        bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
+        for i, obj in enumerate([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']):
+            obj.batch_index = i
 
     # ExportHelper mixin class uses this
     filename_ext = ".vbx"
@@ -283,10 +289,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
-        # Blender Python trickery: dynamic addition of an index variable to the class
-        bpy.types.Object.index = bpy.props.IntProperty()    # Each instance now has an index!
-        for i, obj in enumerate(mesh_selection):
-            obj.index = i
+        # BATCH INDEX WAS HERE!
+        
         
         # << Prepare a structure to map vertex attributes to the actual contents >>
         
@@ -493,7 +497,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "file":path.basename(self.filepath),
                             "offset":offset_per_obj[obj],
                             "no_verts":object_info[obj],
-                            "index":obj.index,
+                            "batch_index":obj.batch_index,
                             "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:],
@@ -586,7 +590,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         f_desc.close()
         
         # Cleanup: remove dynamic property from class
-        del bpy.types.Object.index
+        del bpy.types.Object.batch_index
         
         return {'FINISHED'}
 
