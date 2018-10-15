@@ -1,8 +1,8 @@
 bl_info = {
-    "name": "Export GM:Studio Vertex Buffer",
-    "description": "Vertex buffer exporter for GM:Studio with customizable vertex format",
+    "name": "Export GM:Studio BLMod",
+    "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 7, 0),
+    "version": (0, 7, 2),
     "blender": (2, 78, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -121,9 +121,9 @@ bpy.utils.register_class(RemoveAttributeOperator)
 # ExportHelper is a helper class, defines filename and
 # invoke() function which calls the file selector.
 class ExportGMSVertexBuffer(Operator, ExportHelper):
-    """Export (part of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
-    bl_idname = "export_scene.gms_vbx" # important since its how bpy.ops.export_scene.gms_vbx is constructed
-    bl_label = "Export GM:Studio Vertex Buffer"
+    """Export (parts of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
+    bl_idname = "export_scene.gms_blmod" # important since its how bpy.ops.export_scene.gms_blmod is constructed
+    bl_label = "Export GM:Studio BLMod"
     bl_options = {'PRESET'}                 # Allow presets of exporter configurations
     
     def __init__(self):
@@ -288,9 +288,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             bpy.ops.mesh.separate(type='MATERIAL')
         
         mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
-        
-        # BATCH INDEX WAS HERE!
-        
         
         # << Prepare a structure to map vertex attributes to the actual contents >>
         
@@ -501,6 +498,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
                             "rotation":obj.rotation_euler[:],
                             "scale":obj.scale[:],
+                            "layers":[lv for lv in obj.layers],
                             "materials":[mat.name for mat in obj.material_slots],
                             "alpha": obj.material_slots[0].material.alpha,
                             "diffuse_color": obj.material_slots[0].material.diffuse_color[:],
@@ -573,6 +571,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc["objects"].extend(armatures)
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
+        desc["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
         desc["materials"] = [mat.name for mat in bpy.data.materials]
         
         # Save textures
@@ -597,7 +596,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
 
 # Only needed if you want to add into a dynamic menu
 def menu_func_export(self, context):
-    self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GM:Studio Vertex Buffer (*.vbx)")
+    self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GM:Studio BLMod (*.json + *.vbx)")
 
 
 def register():
