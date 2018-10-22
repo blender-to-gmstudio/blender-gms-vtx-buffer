@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GM:Studio BLMod",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 7, 2),
+    "version": (0, 7, 3),
     "blender": (2, 78, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -340,10 +340,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 pos = props['pos']
             pos.append(ctr)
         
-        print(map_unique)
+        #print(map_unique)
         
         lerp_mask = [x.int for x in self.vertex_format]
-        print(lerp_mask)
+        #print(lerp_mask)
         
         #Get all indices in the attributes array that will contain interpolated values
         lerped_indices = [i for i,x in enumerate(self.vertex_format) if x.int]
@@ -381,10 +381,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
         # Initialize each item with a null byte sequence of the appropriate length
-        list = []
-        for i in self.vertex_format:
-            fmt = i.fmt
-            list.append(pack(fmt,*([0]*len(fmt))))
+        list = [pack(i.fmt,*([0]*len(i.fmt))) for i in self.vertex_format]
         
         # Loop through scene frames
         for i in range(frame_count):
@@ -506,8 +503,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Coming up next: 
         # for type_collection in [bpy.data.meshes,bpy.data.objects,bpy.data.materials,bpy.data.images,bpy.data.textures,bpy.data.cameras,bpy.data.lamps]:
         #    [{i:getattr(ins,i) for i in ins.bl_rna.properties.keys()} for ins in type_collection]
-        
-        # TODO: either add extra info as a header to the binary format or as external JSON file
         desc = {}
         desc["objects"]   = [{
                             "name":obj.name,
