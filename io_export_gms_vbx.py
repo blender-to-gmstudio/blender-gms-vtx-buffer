@@ -157,7 +157,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             obj.batch_index = i
 
     # ExportHelper mixin class uses this
-    filename_ext = ".vbx"
+    filename_ext = ".json"
 
     filter_glob = StringProperty(
         default="*.vbx",
@@ -318,7 +318,29 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # First convert the contents of vertex_format to something we can use
         # TODO: support collections
         attribs = []
-        for i in self.vertex_format:
+        map_unique = {}
+        for ctr, i in enumerate(self.vertex_format):
+            print(i)
+            if i.type not in map_unique:
+                vals = {}
+                map_unique[i.type] = vals
+            else:
+                vals = map_unique[i.type]
+            if i.attr not in vals:
+                props = {}
+                vals[i.attr] = props
+            else:
+                props = vals[i.attr]
+            props['fmt'] = i.fmt
+            if i.func != '':
+                props['func'] = i.func
+            if 'pos' not in props:
+                pos = []
+                props['pos'] = pos
+            else:
+                pos = props['pos']
+            pos.append(ctr)
+            
             if i.func == '':
                 attribs.append((i.type,i.attr,{'fmt':i.fmt},'i' if i.int else ''))
             else:
@@ -326,10 +348,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 # Important: a "bound method" is something different than a function and passes the 'self' as an additional parameter!
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
+        print(map_unique)
         #print(attribs)
         
         attribs2 = [{(i.type,i.attr):{'fmt':i.fmt,'func':globals()[i.func] if i.func != '' else '','int':i.int}} for i in self.vertex_format]
-        #print(attribs2)
+        print(attribs2)
         
         lerp_mask = [x.int for x in self.vertex_format]
         print(lerp_mask)
@@ -492,7 +515,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Final step: write all bytearrays to one or more file(s) in one or more directories
         offset = 0
         offset_per_obj = dict()
-        f = open(self.filepath,"wb")
+        f = open(root + ".vbx","wb")
         # TODO: per frame, per object, ...
         for frame in result:
             # TODO: create new directory
