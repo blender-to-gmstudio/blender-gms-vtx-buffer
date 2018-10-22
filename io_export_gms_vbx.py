@@ -317,7 +317,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         # First convert the contents of vertex_format to something we can use
         # TODO: support collections
-        attribs = []
         map_unique = {}
         for ctr, i in enumerate(self.vertex_format):
             print(i)
@@ -333,52 +332,26 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 props = vals[i.attr]
             props['fmt'] = i.fmt
             if i.func != '':
-                props['func'] = i.func
+                props['func'] = globals()[i.func]
             if 'pos' not in props:
                 pos = []
                 props['pos'] = pos
             else:
                 pos = props['pos']
             pos.append(ctr)
-            
-            if i.func == '':
-                attribs.append((i.type,i.attr,{'fmt':i.fmt},'i' if i.int else ''))
-            else:
-                # Note: currently using globals() to get a globally defined function - might (and should) change in the future...
-                # Important: a "bound method" is something different than a function and passes the 'self' as an additional parameter!
-                attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
         print(map_unique)
-        #print(attribs)
-        
-        attribs2 = [{(i.type,i.attr):{'fmt':i.fmt,'func':globals()[i.func] if i.func != '' else '','int':i.int}} for i in self.vertex_format]
-        print(attribs2)
         
         lerp_mask = [x.int for x in self.vertex_format]
         print(lerp_mask)
         
-        # Convert linear list to nested dictionary for easier access while looping
-        map_unique = {}
-        
-        for a in attribs:
-            map_unique[a[0]] = dict()
-        
-        for a in attribs:
-            map_unique[a[0]][a[1]]  = a[2]
-            map_unique[a[0]][a[1]]['pos']  = []
-        
-        for i, a in enumerate(attribs):
-            map_unique[a[0]][a[1]]['pos'].append(i)
-        
-        print(map_unique)
-        
         #Get all indices in the attributes array that will contain interpolated values
-        lerped_indices = [i for i,x in enumerate(attribs) if len(x) == 4 and x[3] == 'i']
+        lerped_indices = [i for i,x in enumerate(self.vertex_format) if x.int]
         lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
 
         # Get format strings and sizes
-        fmt_cur = ''.join([a[2]['fmt'] for a in attribs[:lerp_start]])  # Current attribs format
-        fmt     = ''.join([a[2]['fmt'] for a in attribs])               # All attribs format
+        fmt_cur = ''.join(a.fmt for a in self.vertex_format[:lerp_start])   # Current attribs format
+        fmt     = ''.join(a.fmt for a in self.vertex_format)                # All attribs format
         fmt_cur_size = calcsize(fmt_cur)
         fmt_size = calcsize(fmt)
         
@@ -409,8 +382,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
         # Initialize each item with a null byte sequence of the appropriate length
         list = []
-        for i in attribs:
-            fmt = i[2]['fmt']
+        for i in self.vertex_format:
+            fmt = i.fmt
             list.append(pack(fmt,*([0]*len(fmt))))
         
         # Loop through scene frames
