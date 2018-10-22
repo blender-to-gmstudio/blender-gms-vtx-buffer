@@ -98,6 +98,15 @@ class AttributeType(bpy.types.PropertyGroup):
     #def update_type(self, context):
     #    self.attr = test_cb(self,context)
     
+    def set_format_from_type(self, context):
+        attr = getattr(bpy.types,self.type).bl_rna.properties[self.attr]
+        map_fmt = {'FLOAT':'f','INT':'i'}   # TODO: extend this list a bit
+        type = map_fmt.get(attr.type,'?')   # Question mark '?' means "I don't know what this should be..."
+        if (attr.is_array):
+            self.fmt = type * attr.array_length
+        else:
+            self.fmt = type
+    
     # Currently supported attribute sources, maintained manually at the moment
     supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','ShapeKeyPoint','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
     source_items = []
@@ -108,10 +117,11 @@ class AttributeType(bpy.types.PropertyGroup):
     
     # Actual properties
     type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items, default="MeshVertex")
-    attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb)
+    attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb, update = set_format_from_type)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value (value in next frame)", default=False)
     func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="")
+    #func = bpy.props.EnumProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", items=[("","",""),("float_to_byte","float_to_byte",""),("vec_to_bytes","vec_to_bytes",""),("invert_v","invert_v",""),("invert_y","invert_y",""),("vertex_group_ids_to_bitmask","vertex_group_ids_to_bitmask","")], default="")
 
 # Operators to get the vertex format customization add/remove to work
 # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel
