@@ -45,23 +45,10 @@ def vertex_group_ids_to_bitmask(vertex):
         masked |= 1 << group
     return masked
 
-# Currently supported attribute sources, maintained manually at the moment
-supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','ShapeKeyPoint','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
-source_items = []
-for src in supported_sources:
-    id = getattr(bpy.types,src)
-    rna = id.bl_rna
-    source_items.append((rna.identifier,rna.name,rna.description))
-
-def test_cb(self,context):
-    props = getattr(bpy.types,self.type).bl_rna.properties
-    items = [(p.identifier,p.name,p.description) for p in props]
-    
-    return items
-
 # Stuff to export physics
-physics_props = {'angular_damping','collision_shape','enabled','friction','kinematic','linear_damping','mass','restitution','type'}
 def object_physics_to_json(obj):
+    """For objects of type 'MESH', exports all edge loops that make up a face or polygon. Each one becomes a chain fixture in Game Maker."""
+    physics_props = {'angular_damping','collision_shape','enabled','friction','kinematic','linear_damping','mass','restitution','type'}
     b = obj.rigid_body
     
     if b == None:
@@ -73,17 +60,54 @@ def object_physics_to_json(obj):
     # Get reference to object data
     d = obj.data
     
-    # Select the necessary stuff (single face loop)
+    # Select the necessary stuff
+    physics_settings['coords'] = []
     for poly in d.polygons:
         vtx_indices = [d.loops[x].vertex_index for x in poly.loop_indices]
         ordered_verts = [d.vertices[x].co.xy[:] for x in vtx_indices]
-        physics_settings['coords'] = ordered_verts
+        physics_settings['coords'].append(ordered_verts)
     
     return physics_settings
 
+def object_get_texture_name(obj):
+    """Returns the name of the texture image if the object has one defined"""
+    tex_name = ""
+    for ms in obj.material_slots:
+        mat = ms.material
+        if mat != None:
+            ts = mat.texture_slots[0]
+            if (ts != None):
+                tex = ts.texture
+                tex_name = tex.image.name
+    return tex_name
+
+def object_get_diffuse_color(obj):
+    if (len(obj.material_slots) > 0):
+        return obj.material_slots[0].material.diffuse_color[:]
+    else:
+        return (1.0,1.0,1.0)
+
 # Custom type to be used in collection
 class AttributeType(bpy.types.PropertyGroup):
-    type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items)
+    # Getter and setter functions
+    def test_cb(self,context):
+        props = getattr(bpy.types,self.type).bl_rna.properties
+        items = [(p.identifier,p.name,p.description) for p in props]
+        return items
+    
+    #def update_type(self, context):
+    #    self.attr = test_cb(self,context)
+    
+    # Currently supported attribute sources, maintained manually at the moment
+    supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','ShapeKeyPoint','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
+    source_items = []
+    for src in supported_sources:
+        id = getattr(bpy.types,src)
+        rna = id.bl_rna
+        source_items.append((rna.identifier,rna.name,rna.description))
+    
+    # Actual properties
+    type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items, default="MeshVertex")
     attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value (value in next frame)", default=False)
@@ -302,10 +326,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 # Important: a "bound method" is something different than a function and passes the 'self' as an additional parameter!
                 attribs.append((i.type,i.attr,{'fmt':i.fmt,'func':globals()[i.func]},'i' if i.int else ''))
         
-        print(attribs)
+        #print(attribs)
         
         attribs2 = [{(i.type,i.attr):{'fmt':i.fmt,'func':globals()[i.func] if i.func != '' else '','int':i.int}} for i in self.vertex_format]
-        print(attribs2)
+        #print(attribs2)
         
         lerp_mask = [x.int for x in self.vertex_format]
         print(lerp_mask)
@@ -427,7 +451,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             uv = None
                             for slot in [x for x in mat.texture_slots if x != None and x.texture_coords == 'UV']:
                                 if slot.uv_layer == '':
-                                    uv = uvs[loop.index]                                # Use default uv layer
+                                    uv = uvs[loop.index]                                # Use active uv layer
                                 else:
                                     uv = data.uv_layers[slot.uv_layer].data[loop.index] # Use the given uv layer
                             
@@ -440,6 +464,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             fetch_attribs(map_unique['MeshLoopColor'],vtx_col,list)
                         
                         # Get shape key coordinates
+                        #print(data.shape_keys)
                         if 'ShapeKeyPoint' in map_unique:
                             kbs = data.shape_keys.key_blocks
                             for kb in kbs:
@@ -497,12 +522,13 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "batch_index":obj.batch_index,
                             "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
                             "rotation":obj.rotation_euler[:],
+                            "dimensions":obj.dimensions[:],
                             "scale":obj.scale[:],
                             "layers":[lv for lv in obj.layers],
                             "materials":[mat.name for mat in obj.material_slots],
-                            "alpha": obj.material_slots[0].material.alpha,
-                            "diffuse_color": obj.material_slots[0].material.diffuse_color[:],
-                            "texture":obj.material_slots[0].material.texture_slots[0].texture.image.name if obj.material_slots[0].material.texture_slots[0] != None else "", # Yuck...
+                            "alpha": [ms.material.alpha for ms in obj.material_slots],
+                            "diffuse_color": object_get_diffuse_color(obj),
+                            "texture":object_get_texture_name(obj),
                             "vertex_groups":[vg.name for vg in obj.vertex_groups],
                             "physics":object_physics_to_json(obj)
                             }
@@ -564,11 +590,19 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             "scale":obj.scale[:]
         }
         for obj in context.selected_objects if obj.type == 'ARMATURE']
+        groups = [{
+            "name": grp.name,
+            "dupli_offset": grp.dupli_offset[:],
+            "objects": [obj.name for obj in grp.objects],
+            "layers:": [l for l in grp.layers]
+        }
+        for grp in bpy.data.groups]
         desc["objects"].extend(cameras)
         desc["objects"].extend(lamps)
         desc["objects"].extend(speakers)
         desc["objects"].extend(emptys)
         desc["objects"].extend(armatures)
+        desc["groups"] = groups
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         desc["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
@@ -577,7 +611,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Save textures
         if self.export_textures:
             for obj in mesh_selection:                              # Only mesh objects have texture slots
-                tex_slot = obj.material_slots[0].material.texture_slots[0]
+                for ms in obj.material_slots:
+                    mat = ms.material
+                    tex_slot = mat.texture_slots[0]
                 if tex_slot != None:
                     image = tex_slot.texture.image
                     image.save_render(base + '/' + image.name,context.scene)
