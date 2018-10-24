@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GM:Studio BLMod",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 7, 3),
+    "version": (0, 8, 0),
     "blender": (2, 79, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -30,23 +30,27 @@ def fetch_attribs(desc,node,ba,byte_pos,frame):
                 ind = byte_pos+offset
                 ba[frame-index][ind:ind+attr_blen] = pack(fmt,*getattr(node,prop))
 
-def write_object_ba(obj,desc,ba,frame):
+def write_object_ba(scene,obj,desc,ba,frame):
     """Traverse the object's mesh data at the given frame and write to the appropriate bytearray in ba using the description data structure provided"""
     desc, vertex_format_bytesize = desc
-    
-    # TODO: write scene attributes here
-    
     
     mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
     m = obj.to_mesh(bpy.context.scene,True,'RENDER')
     obj.modifiers.remove(mod_tri)
     m.transform(obj.matrix_world)
     
-    # Loop through triangles
     ba_pos = 0
     for p in m.polygons:
         # Loop through vertices
         for li in p.loop_indices:
+            fetch_attribs(desc,scene,ba,ba_pos,frame)
+            fetch_attribs(desc,obj,ba,ba_pos,frame)
+            
+            fetch_attribs(desc,p,ba,ba_pos,frame)
+            
+            mat = m.materials[p.material_index]
+            fetch_attribs(desc,mat,ba,ba_pos,frame)
+            
             loop = m.loops[li]
             fetch_attribs(desc,loop,ba,ba_pos,frame)
             
@@ -90,7 +94,7 @@ def construct_ba(obj,desc,frame_count):
     bpy.data.meshes.remove(m)                                   # TODO: any easier way to get number of vertices??
     desc, vertex_format_bytesize = desc
     ba = [bytearray([0] * no_verts * vertex_format_bytesize) for i in range(0,frame_count)]
-    return ba
+    return ba, no_verts
 
 ### End of Export Function Definitions ###
 
@@ -234,12 +238,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     def __init__(self):
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
-        for i, obj in enumerate([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']):
-            obj.batch_index = i
-
+    
     # ExportHelper mixin class uses this
     filename_ext = ".json"
-
+    
     filter_glob = StringProperty(
         default="*.json",
         options={'HIDDEN'},
@@ -377,10 +379,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Get objects
         s = context.scene
         mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
         
         # Attribs
         attribs = [(i.type,i.attr,i.fmt,i.int,i.func) for i in self.vertex_format]
-        print(attribs)
+        #print(attribs)
         
         # Split by material
         if self.split_by_material:
@@ -390,11 +393,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
         
         ba_per_object = {}
+        no_verts_per_object = {}
         desc_per_object = {}
         for obj in mesh_selection:
             desc_per_object[obj] = construct_ds(obj,attribs)
-            print(desc_per_object[obj])
-            ba_per_object[obj] = construct_ba(obj,desc_per_object[obj],frame_count)
+            ba_per_object[obj], no_verts_per_object[obj] = construct_ba(obj,desc_per_object[obj],frame_count)
         
         # << End of preparation of structure >>
         
@@ -403,16 +406,19 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Loop through scene frames
         for i in range(frame_count):
             # First set the current frame
-            bpy.context.scene.frame_set(s.frame_start+i)
+            s.frame_set(s.frame_start+i)
             
             # Now add frame vertex data for the current object
             for obj in mesh_selection:
-                write_object_ba(obj,desc_per_object[obj],ba_per_object[obj],i)
+                write_object_ba(s,obj,desc_per_object[obj],ba_per_object[obj],i)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
         f = open(root + ".vbx","wb")
         
-        for obj, ba in ba_per_object.items():
+        offset = {}
+        for obj in mesh_selection:
+            ba = ba_per_object[obj]
+            offset[obj] = f.tell()
             for b in ba:
                 f.write(b)
         
@@ -427,9 +433,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "name":obj.name,
                             "type":obj.type,
                             "file":path.basename(self.filepath),
-                            #"offset":offset_per_obj[obj],
-                            #"no_verts":object_info[obj],
-                            #"batch_index":obj.batch_index,
+                            "offset":offset[obj],
+                            "no_verts":no_verts_per_object[obj],
+                            "batch_index":obj.batch_index,
                             "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
                             "rotation":obj.rotation_euler[:],
                             "dimensions":obj.dimensions[:],
