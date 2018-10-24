@@ -20,6 +20,80 @@ from os import path, makedirs
 from os.path import splitext, split
 from struct import pack, calcsize
 
+### Export Function Definitions ###
+def fetch_attribs(desc,node,ba,byte_pos,frame):
+    """"Fetch the attribute values from the given node and place in ba at byte_pos"""
+    id = node.bl_rna.identifier
+    if id in desc:
+        for prop, occurences in desc[id].items():                   # Property name and occurences in bytedata
+            for offset, attr_blen, fmt, index, func in occurences:  # Each occurence's data (tuple assignment!)
+                ind = byte_pos+offset
+                ba[frame-index][ind:ind+attr_blen] = pack(fmt,*getattr(node,prop))
+
+def write_object_ba(obj,desc,ba,frame):
+    """Traverse the object's mesh data at the given frame and write to the appropriate bytearray in ba using the description data structure provided"""
+    desc, vertex_format_bytesize = desc
+    
+    # TODO: write scene attributes here
+    
+    
+    mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
+    m = obj.to_mesh(bpy.context.scene,True,'RENDER')
+    obj.modifiers.remove(mod_tri)
+    m.transform(obj.matrix_world)
+    
+    # Loop through triangles
+    ba_pos = 0
+    for p in m.polygons:
+        # Loop through vertices
+        for li in p.loop_indices:
+            loop = m.loops[li]
+            fetch_attribs(desc,loop,ba,ba_pos,frame)
+            
+            vertex = m.vertices[loop.vertex_index]
+            fetch_attribs(desc,vertex,ba,ba_pos,frame)
+            
+            # We wrote a full vertex, so we can now increment the bytearray position by the vertex format size
+            ba_pos += vertex_format_bytesize
+    
+    bpy.data.meshes.remove(m)
+
+def construct_ds(obj,attr):
+    """Constructs the data structure required to move through the attributes of a given object"""
+    desc, offset = {}, 0
+    
+    for a in attr:
+        ident, atn, format, fo, func = a
+        
+        if ident not in desc:
+            desc[ident] = {}
+        dct_obj = desc[ident]
+        
+        if atn not in dct_obj:
+            dct_obj[atn] = []
+        lst_attr = dct_obj[atn]
+        
+        prop_rna = getattr(bpy.types,ident).bl_rna.properties[atn]
+        attrib_bytesize = calcsize(format)
+        
+        lst_attr.append((offset,attrib_bytesize,format,fo,func))
+        offset += attrib_bytesize
+        
+    return (desc, offset)
+
+def construct_ba(obj,desc,frame_count):
+    """Construct the required bytearrays to store vertex data for the given object for the given number of frames"""
+    mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
+    m = obj.to_mesh(bpy.context.scene,True,'RENDER')
+    obj.modifiers.remove(mod_tri)
+    no_verts = len(m.polygons) * 3
+    bpy.data.meshes.remove(m)                                   # TODO: any easier way to get number of vertices??
+    desc, vertex_format_bytesize = desc
+    ba = [bytearray([0] * no_verts * vertex_format_bytesize) for i in range(0,frame_count)]
+    return ba
+
+### End of Export Function Definitions ###
+
 # Conversion functions (go into the globals() dictionary for now...)
 def float_to_byte(val):
     """Convert value in range [0,1] to an integer value in range [0,255]"""
@@ -102,10 +176,7 @@ class AttributeType(bpy.types.PropertyGroup):
         attr = getattr(bpy.types,self.type).bl_rna.properties[self.attr]
         map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # TODO: extend this list a bit more
         type = map_fmt.get(attr.type,'*')                   # Asterisk '*' means "I don't know what this should be..."
-        if (attr.is_array):
-            self.fmt = type * attr.array_length
-        else:
-            self.fmt = type
+        self.fmt = type * attr.array_length if attr.is_array else type
     
     # Currently supported attribute sources, maintained manually at the moment
     supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','ShapeKeyPoint','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
@@ -119,7 +190,7 @@ class AttributeType(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items, default="MeshVertex")
     attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb, update = set_format_from_type)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
-    int = bpy.props.BoolProperty(name="Int", description="Whether to write the interpolated value (value in next frame)", default=False)
+    int = bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
     func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="")
     #func = bpy.props.EnumProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", items=[("","",""),("float_to_byte","float_to_byte",""),("vec_to_bytes","vec_to_bytes",""),("invert_v","invert_v",""),("invert_y","invert_y",""),("vertex_group_ids_to_bitmask","vertex_group_ids_to_bitmask","")], default="")
 
@@ -175,6 +246,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         maxlen=255,  # Max internal buffer length, longer would be clamped.
     )
     
+    ### Property Definitions ###
     selection_only = BoolProperty(
         name="Selection Only",
         default=True,
@@ -242,6 +314,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         default=True,
         description="Export texture images to same directory as result file",
     )
+    ### End of Property Definitions ###
     
     def draw(self, context):
         layout = self.layout
@@ -290,18 +363,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         box.prop(self,'export_textures')
 
     def execute(self, context):
-        # Get all attributes from ref, defined in attr
-        # and place them at appropriate indexes in list
-        def fetch_attribs(attr,ref,list):
-            for attrib in attr:
-                fmt, indices = attr[attrib]['fmt'], attr[attrib]['pos']
-                val = getattr(ref,attrib)
-                if 'func' in attr[attrib]:
-                    val = attr[attrib]['func'](val)
-                val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
-                for j in indices:
-                    list[j] = val_bin
-        
         # Prepare a bit
         root, ext = splitext(self.filepath)
         base, fname = split(self.filepath)
@@ -313,196 +374,48 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # TODO: transformation and axes step
         
         
+        # Get objects
+        s = context.scene
+        mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        
+        # Attribs
+        attribs = [(i.type,i.attr,i.fmt,i.int,i.func) for i in self.vertex_format]
+        print(attribs)
+        
         # Split by material
         if self.split_by_material:
             bpy.ops.mesh.separate(type='MATERIAL')
         
-        mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
-        
         # << Prepare a structure to map vertex attributes to the actual contents >>
+        frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
         
-        # First convert the contents of vertex_format to something we can use
-        # TODO: support collections
-        map_unique = {}
-        for ctr, i in enumerate(self.vertex_format):
-            print(i)
-            if i.type not in map_unique:
-                vals = {}
-                map_unique[i.type] = vals
-            else:
-                vals = map_unique[i.type]
-            if i.attr not in vals:
-                props = {}
-                vals[i.attr] = props
-            else:
-                props = vals[i.attr]
-            props['fmt'] = i.fmt
-            if i.func != '':
-                props['func'] = globals()[i.func]
-            if 'pos' not in props:
-                pos = []
-                props['pos'] = pos
-            else:
-                pos = props['pos']
-            pos.append(ctr)
-        
-        print(map_unique)
-        
-        lerp_mask = [x.int for x in self.vertex_format]
-        #print(lerp_mask)
-        
-        #Get all indices in the attributes array that will contain interpolated values
-        lerped_indices = [i for i,x in enumerate(self.vertex_format) if x.int]
-        lerp_start = lerped_indices[0] if len(lerped_indices) > 0 else len(lerped_indices)  # Index of first interpolated attribute value
-
-        # Get format strings and sizes
-        fmt_cur = ''.join(a.fmt for a in self.vertex_format[:lerp_start])   # Current attribs format
-        fmt     = ''.join(a.fmt for a in self.vertex_format)                # All attribs format
-        fmt_cur_size = calcsize(fmt_cur)
-        fmt_size = calcsize(fmt)
+        ba_per_object = {}
+        desc_per_object = {}
+        for obj in mesh_selection:
+            desc_per_object[obj] = construct_ds(obj,attribs)
+            print(desc_per_object[obj])
+            ba_per_object[obj] = construct_ba(obj,desc_per_object[obj],frame_count)
         
         # << End of preparation of structure >>
         
         # << Now execute >>
         
-        # Format of return value is: [{'obj1':bytearray,'obj2':bytearray},{'obj1':bytearray,'obj2':bytearray}]
-        
-        # Dictionary to store additional info per object
-        object_info = {}
-        
-        # Get objects
-        s = context.scene
-        
-        offset_index = {obj:0 for obj in mesh_selection}
-        
-        # Generate list with required bytearrays for each frame and each object (assuming triangulated faces)
-        frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
-        for obj in mesh_selection:
-            mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
-            data = obj.to_mesh(context.scene,True,'RENDER')
-            obj.modifiers.remove(mod_tri)
-            object_info[obj] = len(data.polygons)*3     # Assuming triangulated faces
-            bpy.data.meshes.remove(data)
-        result = [{obj:bytearray(fmt_size*object_info[obj]) for obj in mesh_selection} for x in range(frame_count)]
-        
-        # List to contain binary vertex attribute data, before binary 'concat' (i.e. join)
-        # Initialize each item with a null byte sequence of the appropriate length
-        list = [pack(i.fmt,*([0]*len(i.fmt))) for i in self.vertex_format]
-        
         # Loop through scene frames
         for i in range(frame_count):
-            s.frame_set(s.frame_start+i)
+            # First set the current frame
+            bpy.context.scene.frame_set(s.frame_start+i)
             
-            if 'Scene' in map_unique:
-                fetch_attribs(map_unique['Scene'],s,list)
-            
-            # For each object in selection
+            # Now add frame vertex data for the current object
             for obj in mesh_selection:
-                # Add a temporary triangulate modifier, to make sure we get triangles
-                mod_tri = obj.modifiers.new('to_triangles','TRIANGULATE')
-                data = obj.to_mesh(context.scene,True,'RENDER')
-                obj.modifiers.remove(mod_tri)
-                
-                # Apply object transform to mesh => not going to happen, since join is meant for this
-                
-                # Add object data
-                # TODO: obj.bl_rna.properties, bpy.types, ...
-                if 'Object' in map_unique:
-                    fetch_attribs(map_unique['Object'],obj,list)
-                
-                if 'MeshUVLoop' in map_unique:
-                    uvs = data.uv_layers.active.data                # TODO: handle case where object/mesh has no uv maps
-                
-                if 'MeshLoopColor' in map_unique:
-                    vertex_colors = data.vertex_colors.active.data  # TODO: handle case where object/mesh has no vertex colours
-                
-                offset_index[obj] = 0   # Counter for offsets in bytearrays
-                for p in data.polygons:
-                    if 'MeshPolygon' in map_unique:
-                        fetch_attribs(map_unique['MeshPolygon'],p,list)
-                    
-                    mat = data.materials[p.material_index]
-                    if 'Material' in map_unique:
-                        fetch_attribs(map_unique['Material'],mat,list)
-                    
-                    if self.reverse_loop:
-                        iter = reversed(p.loop_indices)
-                    else:
-                        iter = p.loop_indices
-                    for li in iter:
-                        loop = data.loops[li]
-                        
-                        # Get loop attributes
-                        if 'MeshLoop' in map_unique:
-                            fetch_attribs(map_unique['MeshLoop'],loop,list)
-                        
-                        # Get vertex
-                        v = data.vertices[loop.vertex_index]
-                        
-                        # Get vertex group stuff
-                        if 'VertexGroupElement' in map_unique:
-                            g = v.groups[0]     # TESTING Single vertex group
-                            fetch_attribs(map_unique['VertexGroupElement'],g,list)
-                        
-                        # Get UV
-                        # TODO: get all uv's! (i.e. support multiple texture slots/stages)
-                        if 'MeshUVLoop' in map_unique:
-                            uv = None
-                            for slot in [x for x in mat.texture_slots if x != None and x.texture_coords == 'UV']:
-                                if slot.uv_layer == '':
-                                    uv = uvs[loop.index]                                # Use active uv layer
-                                else:
-                                    uv = data.uv_layers[slot.uv_layer].data[loop.index] # Use the given uv layer
-                            
-                            if uv != None:
-                                fetch_attribs(map_unique['MeshUVLoop'],uv,list)
-                        
-                        # Get vertex colour
-                        if 'MeshLoopColor' in map_unique:
-                            vtx_col = vertex_colors[loop.index]
-                            fetch_attribs(map_unique['MeshLoopColor'],vtx_col,list)
-                        
-                        # Get shape key coordinates
-                        #print(data.shape_keys)
-                        if 'ShapeKeyPoint' in map_unique:
-                            kbs = data.shape_keys.key_blocks
-                            for kb in kbs:
-                                fetch_attribs(map_unique['ShapeKeyPoint'],kb.data,list)
-                        
-                        # Get vertex attributes
-                        if 'MeshVertex' in map_unique:
-                            fetch_attribs(map_unique['MeshVertex'],v,list)
-                        
-                        # Now join attribute bytes together
-                        # Remember: interpolated values aren't interpolated yet!
-                        bytes = b''.join(list)
-                        # Index 'calculations'
-                        offset = offset_index[obj] * fmt_size
-                        # Vertex format is always: block of current frame data, block of next frame data
-                        # The below lines copy the current frame bytes to the current frame bytearray for the given object
-                        # and copy the interpolated part of the current frame bytes to the previous frame bytearray for the given object
-                        result[i-0][obj][offset:offset+fmt_cur_size] = bytes[:fmt_cur_size]
-                        result[i-1][obj][offset+fmt_cur_size:offset+fmt_size] = bytes[fmt_cur_size:]
-                        offset_index[obj] = offset_index[obj] + 1
-                
-                # Remove the mesh
-                bpy.data.meshes.remove(data)
+                write_object_ba(obj,desc_per_object[obj],ba_per_object[obj],i)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
-        offset = 0
-        offset_per_obj = dict()
         f = open(root + ".vbx","wb")
-        # TODO: per frame, per object, ...
-        for frame in result:
-            # TODO: create new directory
-            #if not path.exists(directory):
-            #   makedirs(directory)
-            
-            for obj in frame:
-                # TODO: create new file
-                f.write(frame[obj])
-                offset_per_obj[obj] = offset
-                offset += len(frame[obj])
+        
+        for obj, ba in ba_per_object.items():
+            for b in ba:
+                f.write(b)
+        
         f.close()
         
         # Create JSON file (very basic at the moment...)
@@ -514,9 +427,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "name":obj.name,
                             "type":obj.type,
                             "file":path.basename(self.filepath),
-                            "offset":offset_per_obj[obj],
-                            "no_verts":object_info[obj],
-                            "batch_index":obj.batch_index,
+                            #"offset":offset_per_obj[obj],
+                            #"no_verts":object_info[obj],
+                            #"batch_index":obj.batch_index,
                             "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
                             "rotation":obj.rotation_euler[:],
                             "dimensions":obj.dimensions[:],
