@@ -28,9 +28,12 @@ def fetch_attribs(desc,node,ba,byte_pos,frame):
         for prop, occurences in desc[id].items():                   # Property name and occurences in bytedata
             for offset, attr_blen, fmt, index, func in occurences:  # Each occurence's data (tuple assignment!)
                 ind = byte_pos+offset
-                ba[frame-index][ind:ind+attr_blen] = pack(fmt,*getattr(node,prop))
+                val = getattr(node,prop)
+                if func != None: val = func(val)
+                val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
+                ba[frame-index][ind:ind+attr_blen] = val_bin
 
-def write_object_ba(scene,obj,desc,ba,frame):
+def write_object_ba(scene,obj,desc,ba,frame,reverse_loop):
     """Traverse the object's mesh data at the given frame and write to the appropriate bytearray in ba using the description data structure provided"""
     desc, vertex_format_bytesize = desc
     
@@ -42,7 +45,8 @@ def write_object_ba(scene,obj,desc,ba,frame):
     ba_pos = 0
     for p in m.polygons:
         # Loop through vertices
-        for li in p.loop_indices:
+        iter = reversed(p.loop_indices) if reverse_loop else p.loop_indices
+        for li in iter:
             fetch_attribs(desc,scene,ba,ba_pos,frame)
             fetch_attribs(desc,obj,ba,ba_pos,frame)
             
@@ -53,6 +57,10 @@ def write_object_ba(scene,obj,desc,ba,frame):
             
             loop = m.loops[li]
             fetch_attribs(desc,loop,ba,ba_pos,frame)
+            
+            uvs = m.uv_layers.active.data
+            uv = uvs[loop.index]                                # Use active uv layer
+            fetch_attribs(desc,uv,ba,ba_pos,frame)
             
             vertex = m.vertices[loop.vertex_index]
             fetch_attribs(desc,vertex,ba,ba_pos,frame)
@@ -91,7 +99,7 @@ def construct_ba(obj,desc,frame_count):
     m = obj.to_mesh(bpy.context.scene,True,'RENDER')
     obj.modifiers.remove(mod_tri)
     no_verts = len(m.polygons) * 3
-    bpy.data.meshes.remove(m)                                   # TODO: any easier way to get number of vertices??
+    bpy.data.meshes.remove(m)                                   # Any easier way to get number of vertices??
     desc, vertex_format_bytesize = desc
     ba = [bytearray([0] * no_verts * vertex_format_bytesize) for i in range(0,frame_count)]
     return ba, no_verts
@@ -139,11 +147,12 @@ def object_physics_to_json(obj):
     d = obj.data
     
     # Select the necessary stuff
-    physics_settings['coords'] = []
-    for poly in d.polygons:
-        vtx_indices = [d.loops[x].vertex_index for x in poly.loop_indices]
-        ordered_verts = [d.vertices[x].co.xy[:] for x in vtx_indices]
-        physics_settings['coords'].append(ordered_verts)
+    if b.collision_shape == 'MESH':
+        physics_settings['coords'] = []
+        for poly in d.polygons:
+            vtx_indices = [d.loops[x].vertex_index for x in poly.loop_indices]
+            ordered_verts = [d.vertices[x].co.xy[:] for x in vtx_indices]
+            physics_settings['coords'].append(ordered_verts)
     
     return physics_settings
 
@@ -375,6 +384,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         # TODO: transformation and axes step
         
+        # Split by material
+        if self.split_by_material:
+            bpy.ops.mesh.separate(type='MATERIAL')
         
         # Get objects
         s = context.scene
@@ -382,12 +394,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
         
         # Attribs
-        attribs = [(i.type,i.attr,i.fmt,i.int,i.func) for i in self.vertex_format]
+        attribs = [(i.type,i.attr,i.fmt,i.int,None if i.func == "" else globals()[i.func]) for i in self.vertex_format]
         #print(attribs)
-        
-        # Split by material
-        if self.split_by_material:
-            bpy.ops.mesh.separate(type='MATERIAL')
         
         # << Prepare a structure to map vertex attributes to the actual contents >>
         frame_count = s.frame_end-s.frame_start+1 if self.frame_option == 'all' else 1
@@ -410,7 +418,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             
             # Now add frame vertex data for the current object
             for obj in mesh_selection:
-                write_object_ba(s,obj,desc_per_object[obj],ba_per_object[obj],i)
+                write_object_ba(s,obj,desc_per_object[obj],ba_per_object[obj],i,self.reverse_loop)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
         f = open(root + ".vbx","wb")
