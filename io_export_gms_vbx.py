@@ -3,10 +3,10 @@ bl_info = {
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
     "version": (0, 7, 3),
-    "blender": (2, 78, 0),
+    "blender": (2, 79, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
-    "wiki_url": "",
+    "wiki_url": "https://github.com/bartteunis/blender-gms-vbx/wiki",
     "category": "Import-Export"}
 
 # Required imports
@@ -100,8 +100,8 @@ class AttributeType(bpy.types.PropertyGroup):
     
     def set_format_from_type(self, context):
         attr = getattr(bpy.types,self.type).bl_rna.properties[self.attr]
-        map_fmt = {'FLOAT':'f','INT':'i'}   # TODO: extend this list a bit
-        type = map_fmt.get(attr.type,'?')   # Question mark '?' means "I don't know what this should be..."
+        map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # TODO: extend this list a bit more
+        type = map_fmt.get(attr.type,'*')                   # Asterisk '*' means "I don't know what this should be..."
         if (attr.is_array):
             self.fmt = type * attr.array_length
         else:
@@ -119,7 +119,7 @@ class AttributeType(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items, default="MeshVertex")
     attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb, update = set_format_from_type)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
-    int = bpy.props.BoolProperty(name="Interpolated", description="Whether to write the interpolated value (value in next frame)", default=False)
+    int = bpy.props.BoolProperty(name="Int", description="Whether to write the interpolated value (value in next frame)", default=False)
     func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="")
     #func = bpy.props.EnumProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", items=[("","",""),("float_to_byte","float_to_byte",""),("vec_to_bytes","vec_to_bytes",""),("invert_v","invert_v",""),("invert_y","invert_y",""),("vertex_group_ids_to_bitmask","vertex_group_ids_to_bitmask","")], default="")
 
@@ -170,7 +170,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     filename_ext = ".json"
 
     filter_glob = StringProperty(
-        default="*.vbx",
+        default="*.json",
         options={'HIDDEN'},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
     )
@@ -214,15 +214,15 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         )
     )
     
+    export_mesh_data = BoolProperty(
+        name="Export Mesh Data",
+        default=False,
+        description="Whether to export mesh data to a separate, binary file (.vbx)",
+    )
+    
     vertex_format = CollectionProperty(
         name="Vertex Format",
         type=bpy.types.AttributeType,
-    )
-    
-    preparation_step = BoolProperty(
-        name="Preparation Step",
-        default=False,
-        description="Try to make duplicates real and link content from external .blend files"
     )
     
     join_into_active = BoolProperty(
@@ -256,19 +256,23 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         box = layout.box()
         
-        box.label("Vertex Format:")
+        box.label("Mesh Data:")
+        box.prop(self,"export_mesh_data")
         
-        box.operator("export_scene.add_attribute_operator",text="Add")
-        
-        for index, item in enumerate(self.vertex_format):
-            row = box.row()
-            row.prop(item,'type')
-            row.prop(item,'attr')
-            row.prop(item,'fmt')
-            row.prop(item,'func')
-            row.prop(item,'int')
-            opt_remove = row.operator("export_scene.remove_attribute_operator",text="Remove")
-            opt_remove.id = index
+        if self.export_mesh_data == True:
+            box.label("Vertex Format:")
+            
+            box.operator("export_scene.add_attribute_operator",text="Add")
+            
+            for index, item in enumerate(self.vertex_format):
+                row = box.row()
+                row.prop(item,'type')
+                row.prop(item,'attr')
+                row.prop(item,'fmt')
+                row.prop(item,'func')
+                row.prop(item,'int')
+                opt_remove = row.operator("export_scene.remove_attribute_operator",text="Remove")
+                opt_remove.id = index
         
         box = layout.box()
         
@@ -281,7 +285,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         box.label("Extras:")
         
-        box.prop(self,'preparation_step')
         box.prop(self,'join_into_active')
         box.prop(self,'split_by_material')
         box.prop(self,'export_textures')
@@ -302,13 +305,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Prepare a bit
         root, ext = splitext(self.filepath)
         base, fname = split(self.filepath)
-        
-        # Preparation step
-        if self.preparation_step:
-            bpy.ops.object.duplicates_make_real()
-            bpy.ops.object.make_local(type='SELECT_OBDATA') # TODO: also MATERIAL??
-            bpy.ops.object.make_single_user(object=True,obdata=True,material=False,texture=False,animation=False)
-            bpy.ops.object.convert(target='MESH')           # Applies modifiers, etc.
         
         # Join step
         if self.join_into_active:
@@ -350,7 +346,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 pos = props['pos']
             pos.append(ctr)
         
-        #print(map_unique)
+        print(map_unique)
         
         lerp_mask = [x.int for x in self.vertex_format]
         #print(lerp_mask)
