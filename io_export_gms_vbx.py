@@ -437,10 +437,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         json_data = {
             "bpy":{
                 "context":ctx,
-                "data":data}
+                "data":data
             }
+        }
         def object_to_json(obj):
-            """Returns the object in json form"""
+            """Returns the data of the object in a json-compatible form"""
             result = {}
             rna = obj.bl_rna
             for prop in rna.properties:
@@ -476,7 +477,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             return result
         
         # Export bpy.context
-        ctx["objects"] = [object_to_json(obj) for obj in bpy.context.selected_objects]
+        ctx["selected_objects"] = [object_to_json(obj) for obj in bpy.context.selected_objects]
         ctx["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
         
         # Export bpy.data
