@@ -436,27 +436,62 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Coming up next: 
         # for type_collection in [bpy.data.meshes,bpy.data.objects,bpy.data.materials,bpy.data.images,bpy.data.textures,bpy.data.cameras,bpy.data.lamps]:
         #    [{i:getattr(ins,i) for i in ins.bl_rna.properties.keys()} for ins in type_collection]
+        def object_to_json(obj):
+            """Returns the object in json form"""
+            result = {}
+            rna = obj.bl_rna
+            for prop in rna.properties:
+                prop_id = prop.identifier
+                prop_ins = getattr(obj,prop_id)
+                prop_rna = rna.properties[prop_id]
+                type = rna.properties[prop_id].type
+                #print(prop_id,prop_ins,type)
+                if type == 'STRING' or type == 'ENUM':
+                    result[prop_id] = prop_ins
+                elif type == 'POINTER':
+                    result[prop_id] = getattr(prop_ins,'name','') if prop_ins != None else ''
+                elif type == 'COLLECTION':
+                    # Enter collections up to encountering a PointerProperty
+                    result[prop_id] = [object_to_json(prop_item) for prop_item in prop_ins]
+                    pass
+                else:
+                    # 'Simple' attribute types: int, float, boolean
+                    if prop_rna.is_array:
+                        # Sometimes the bl_rna indicates a number of array items, but the actual number is less
+                        # That's because items are stored in an additional object, e.g. a matrix consists of 4 vectors
+                        len_expected = prop_rna.array_length
+                        len_actual = len(prop_ins)
+                        if len_expected > len_actual:
+                            result[prop_id] = []
+                            for item in prop_ins: result[prop_id].extend(item[:])
+                        else:
+                            result[prop_id] = prop_ins[:]
+                    else:
+                        result[prop_id] = prop_ins
+            return result
+        
         desc = {}
-        desc["objects"]   = [{
-                            "name":obj.name,
-                            "type":obj.type,
-                            "file":path.basename(self.filepath),
-                            "offset":offset[obj],
-                            "no_verts":no_verts_per_object[obj],
-                            "batch_index":obj.batch_index,
-                            "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
-                            "rotation":obj.rotation_euler[:],
-                            "dimensions":obj.dimensions[:],
-                            "scale":obj.scale[:],
-                            "layers":[lv for lv in obj.layers],
-                            "materials":[mat_slot.name for mat_slot in obj.material_slots],
-                            "alpha": [ms.material.alpha for ms in obj.material_slots],
-                            "diffuse_color": object_get_diffuse_color(obj),
-                            "texture":object_get_texture_name(obj),
-                            "vertex_groups":[vg.name for vg in obj.vertex_groups],
-                            "physics":object_physics_to_json(obj)
-                            }
-                            for obj in mesh_selection]
+        #desc["objects"]   = [{
+        #                    "name":obj.name,
+        #                    "type":obj.type,
+        #                    "file":path.basename(self.filepath),
+        #                    "offset":offset[obj],
+        #                    "no_verts":no_verts_per_object[obj],
+        #                    "batch_index":obj.batch_index,
+        #                    "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
+        #                    "rotation":obj.rotation_euler[:],
+        #                    "dimensions":obj.dimensions[:],
+        #                    "scale":obj.scale[:],
+        #                    "layers":[lv for lv in obj.layers],
+        #                    "materials":[mat_slot.name for mat_slot in obj.material_slots],
+        #                    "alpha": [ms.material.alpha for ms in obj.material_slots],
+        #                    "diffuse_color": object_get_diffuse_color(obj),
+        #                    "texture":object_get_texture_name(obj),
+        #                    "vertex_groups":[vg.name for vg in obj.vertex_groups],
+        #                    "physics":object_physics_to_json(obj)
+        #                    }
+        #                    for obj in mesh_selection]
+        desc["objects"] = [object_to_json(obj) for obj in bpy.context.selected_objects]
         cameras = [{
             "name":obj.name,
             "type":obj.type,
@@ -530,7 +565,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         desc["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
-        desc["materials"] = {mat.name:{"use_nodes":mat.use_nodes,"use_transparency":mat.use_transparency,"diffuse_color":mat.diffuse_color,"specular_color":mat.specular_color} for mat in bpy.data.materials}
+        desc["materials"] = {mat.name:{"use_nodes":mat.use_nodes,"use_transparency":mat.use_transparency,"diffuse_color":mat.diffuse_color[:],"specular_color":mat.specular_color[:]} for mat in bpy.data.materials}
         
         # Save textures
         if self.export_textures:
