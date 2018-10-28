@@ -449,8 +449,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 prop_rna = rna.properties[prop_id]
                 type = rna.properties[prop_id].type
                 #print(prop_id,prop_ins,type)
-                if type == 'STRING' or type == 'ENUM':
+                if type == 'STRING':
                     result[prop_id] = prop_ins
+                elif type == 'ENUM':
+                    result[prop_id] = [flag for flag in prop_ins] if prop_rna.is_enum_flag else prop_ins
                 elif type == 'POINTER':
                     result[prop_id] = getattr(prop_ins,'name','') if prop_ins != None else ''
                 elif type == 'COLLECTION':
@@ -470,6 +472,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             result[prop_id] = prop_ins[:]
                     else:
                         result[prop_id] = prop_ins
+            #print(result)
             return result
         
         # Export bpy.context
@@ -477,10 +480,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         ctx["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
         
         # Export bpy.data
-        data_to_export = ['lamps','speakers','armatures','materials','textures','actions','curves','groups']
+        data_to_export = ['cameras','lamps','speakers','armatures','materials','textures','actions','curves','groups']
         for datatype in data_to_export:
             data[datatype] = [object_to_json(obj) for obj in getattr(bpy.data,datatype)]
-        #data["cameras"] = [object_to_json(obj) for obj in bpy.data.cameras]    # TODO Fix this one!
         
         # Export additional info that might be useful
         json_data["blmod"] = {
