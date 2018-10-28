@@ -200,7 +200,7 @@ class AttributeType(bpy.types.PropertyGroup):
         source_items.append((rna.identifier,rna.name,rna.description))
     
     # Actual properties
-    type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items, default="MeshVertex")
+    type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items, default="MeshVertex", update = set_format_from_type)
     attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb, update = set_format_from_type)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int = bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
@@ -377,6 +377,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Prepare a bit
         root, ext = splitext(self.filepath)
         base, fname = split(self.filepath)
+        s = context.scene
         
         # Join step
         if self.join_into_active:
@@ -389,7 +390,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             bpy.ops.mesh.separate(type='MATERIAL')
         
         # Get objects
-        s = context.scene
         mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
         
@@ -449,7 +449,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             "dimensions":obj.dimensions[:],
                             "scale":obj.scale[:],
                             "layers":[lv for lv in obj.layers],
-                            "materials":[mat.name for mat in obj.material_slots],
+                            "materials":[mat_slot.name for mat_slot in obj.material_slots],
                             "alpha": [ms.material.alpha for ms in obj.material_slots],
                             "diffuse_color": object_get_diffuse_color(obj),
                             "texture":object_get_texture_name(obj),
@@ -530,7 +530,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
         desc["no_frames"] = frame_count                             # Number of frames that are exported
         desc["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
-        desc["materials"] = [mat.name for mat in bpy.data.materials]
+        desc["materials"] = {mat.name:{"use_nodes":mat.use_nodes,"use_transparency":mat.use_transparency,"diffuse_color":mat.diffuse_color,"specular_color":mat.specular_color} for mat in bpy.data.materials}
         
         # Save textures
         if self.export_textures:
@@ -542,6 +542,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     image = tex_slot.texture.image
                     image.save_render(base + '/' + image.name,context.scene)
         
+        # Write to file
         f_desc = open(root + ".json","w")
         
         json.dump(desc,f_desc)
