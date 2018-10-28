@@ -432,10 +432,13 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         f.close()
         
-        # Create JSON file (very basic at the moment...)
-        # Coming up next: 
-        # for type_collection in [bpy.data.meshes,bpy.data.objects,bpy.data.materials,bpy.data.images,bpy.data.textures,bpy.data.cameras,bpy.data.lamps]:
-        #    [{i:getattr(ins,i) for i in ins.bl_rna.properties.keys()} for ins in type_collection]
+        # Create JSON description file
+        ctx, data = {}, {}
+        json_data = {
+            "bpy":{
+                "context":ctx,
+                "data":data}
+            }
         def object_to_json(obj):
             """Returns the object in json form"""
             result = {}
@@ -452,7 +455,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     result[prop_id] = getattr(prop_ins,'name','') if prop_ins != None else ''
                 elif type == 'COLLECTION':
                     # Enter collections up to encountering a PointerProperty
-                    result[prop_id] = [object_to_json(prop_item) for prop_item in prop_ins]
+                    result[prop_id] = [object_to_json(prop_item) for prop_item in prop_ins if prop_item != None]
                     pass
                 else:
                     # 'Simple' attribute types: int, float, boolean
@@ -470,28 +473,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                         result[prop_id] = prop_ins
             return result
         
-        desc = {}
-        #desc["objects"]   = [{
-        #                    "name":obj.name,
-        #                    "type":obj.type,
-        #                    "file":path.basename(self.filepath),
-        #                    "offset":offset[obj],
-        #                    "no_verts":no_verts_per_object[obj],
-        #                    "batch_index":obj.batch_index,
-        #                    "location":obj.location[:] if self.handedness == 'rh' else invert_y(obj.location)[:],
-        #                    "rotation":obj.rotation_euler[:],
-        #                    "dimensions":obj.dimensions[:],
-        #                    "scale":obj.scale[:],
-        #                    "layers":[lv for lv in obj.layers],
-        #                    "materials":[mat_slot.name for mat_slot in obj.material_slots],
-        #                    "alpha": [ms.material.alpha for ms in obj.material_slots],
-        #                    "diffuse_color": object_get_diffuse_color(obj),
-        #                    "texture":object_get_texture_name(obj),
-        #                    "vertex_groups":[vg.name for vg in obj.vertex_groups],
-        #                    "physics":object_physics_to_json(obj)
-        #                    }
-        #                    for obj in mesh_selection]
-        desc["objects"] = [object_to_json(obj) for obj in bpy.context.selected_objects]
+        ctx["objects"] = [object_to_json(obj) for obj in bpy.context.selected_objects]
         cameras = [{
             "name":obj.name,
             "type":obj.type,
@@ -556,16 +538,16 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             "layers:": [l for l in grp.layers]
         }
         for grp in bpy.data.groups]
-        desc["objects"].extend(cameras)
-        desc["objects"].extend(lamps)
-        desc["objects"].extend(speakers)
-        desc["objects"].extend(emptys)
-        desc["objects"].extend(armatures)
-        desc["groups"] = groups
-        desc["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
-        desc["no_frames"] = frame_count                             # Number of frames that are exported
-        desc["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
-        desc["materials"] = {mat.name:{"use_nodes":mat.use_nodes,"use_transparency":mat.use_transparency,"diffuse_color":mat.diffuse_color[:],"specular_color":mat.specular_color[:]} for mat in bpy.data.materials}
+        data["cameras"] = cameras
+        data["lamps"] = lamps
+        data["speakers"] = speakers
+        data["emptys"] = emptys
+        data["armatures"] = armatures
+        data["groups"] = groups
+        json_data["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
+        json_data["no_frames"] = frame_count                             # Number of frames that are exported
+        ctx["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
+        data["materials"] = {mat.name:{"use_nodes":mat.use_nodes,"use_transparency":mat.use_transparency,"diffuse_color":mat.diffuse_color[:],"specular_color":mat.specular_color[:]} for mat in bpy.data.materials}
         
         # Save textures
         if self.export_textures:
@@ -580,7 +562,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Write to file
         f_desc = open(root + ".json","w")
         
-        json.dump(desc,f_desc)
+        json.dump(json_data,f_desc)
         
         f_desc.close()
         
