@@ -462,8 +462,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     if prop_rna.is_array:
                         # Sometimes the bl_rna indicates a number of array items, but the actual number is less
                         # That's because items are stored in an additional object, e.g. a matrix consists of 4 vectors
-                        len_expected = prop_rna.array_length
-                        len_actual = len(prop_ins)
+                        len_expected, len_actual = prop_rna.array_length, len(prop_ins)
                         if len_expected > len_actual:
                             result[prop_id] = []
                             for item in prop_ins: result[prop_id].extend(item[:])
@@ -473,83 +472,25 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                         result[prop_id] = prop_ins
             return result
         
+        # Export bpy.context
         ctx["objects"] = [object_to_json(obj) for obj in bpy.context.selected_objects]
-        cameras = [{
-            "name":obj.name,
-            "type":obj.type,
-            "location":obj.location[:],
-            "rotation":obj.rotation_euler[:],
-            "scale":obj.scale[:],
-            "angle":obj.data.angle,
-            "clip_start":obj.data.clip_start,
-            "clip_end":obj.data.clip_end,
-            "cam_type":obj.data.type
-        }
-        for obj in context.selected_objects if obj.type == 'CAMERA']
-        lamps = [{
-            "name":obj.name,
-            "type":obj.type,
-            "location":obj.location[:],
-            "rotation":obj.rotation_euler[:],
-            "scale":obj.scale[:],
-            "lamp_type":obj.data.type,
-            "use_diffuse":obj.data.use_diffuse,
-            "use_specular":obj.data.use_specular,
-            "energy":obj.data.energy
-        }
-        for obj in context.selected_objects if obj.type == 'LAMP']
-        speakers = [{
-            "name":obj.name,
-            "type":obj.type,
-            "location":obj.location[:],
-            "rotation":obj.rotation_euler[:],
-            "scale":obj.scale[:],
-            "volume":obj.data.volume,
-            "pitch":obj.data.pitch,
-            "volume_min":obj.data.volume_min,
-            "volume_max":obj.data.volume_max,
-            "attenuation":obj.data.attenuation,
-            "distance_max":obj.data.distance_max,
-            "distance_reference":obj.data.distance_reference
-        }
-        for obj in context.selected_objects if obj.type == 'SPEAKER']
-        emptys = [{
-            "name":obj.name,
-            "type":obj.type,
-            "location":obj.location[:],
-            "rotation":obj.rotation_euler[:],
-            "scale":obj.scale[:],
-            "dupli_type":obj.dupli_type,
-            "dupli_group":obj.dupli_group
-        }
-        for obj in context.selected_objects if obj.type == 'EMPTY']
-        armatures = [{
-            "name":obj.name,
-            "type":obj.type,
-            "location":obj.location[:],
-            "rotation":obj.rotation_euler[:],
-            "scale":obj.scale[:]
-        }
-        for obj in context.selected_objects if obj.type == 'ARMATURE']
-        groups = [{
-            "name": grp.name,
-            "dupli_offset": grp.dupli_offset[:],
-            "objects": [obj.name for obj in grp.objects],
-            "layers:": [l for l in grp.layers]
-        }
-        for grp in bpy.data.groups]
-        data["cameras"] = cameras
-        data["lamps"] = lamps
-        data["speakers"] = speakers
-        data["emptys"] = emptys
-        data["armatures"] = armatures
-        data["groups"] = groups
-        json_data["format"]    = [{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
-        json_data["no_frames"] = frame_count                             # Number of frames that are exported
         ctx["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
-        data["materials"] = {mat.name:{"use_nodes":mat.use_nodes,"use_transparency":mat.use_transparency,"diffuse_color":mat.diffuse_color[:],"specular_color":mat.specular_color[:]} for mat in bpy.data.materials}
         
-        # Save textures
+        # Export bpy.data
+        data_to_export = ['lamps','speakers','armatures','materials','textures','actions','curves','groups']
+        for datatype in data_to_export:
+            data[datatype] = [object_to_json(obj) for obj in getattr(bpy.data,datatype)]
+        #data["cameras"] = [object_to_json(obj) for obj in bpy.data.cameras]    # TODO Fix this one!
+        
+        # Export additional info that might be useful
+        json_data["blmod"] = {
+            "format":[{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format],
+            "no_frames":frame_count,
+            "blender_version":bpy.app.version[:],
+            "version":bl_info["version"]
+        }
+        
+        # Save textures (TODO: clean this up!)
         if self.export_textures:
             for obj in mesh_selection:                              # Only mesh objects have texture slots
                 for ms in obj.material_slots:
