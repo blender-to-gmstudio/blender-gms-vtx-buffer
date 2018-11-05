@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GM:Studio BLMod",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 8, 0),
+    "version": (0, 8, 1),
     "blender": (2, 79, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -40,7 +40,7 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop):
     mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
     m = obj.to_mesh(bpy.context.scene,True,'RENDER')
     obj.modifiers.remove(mod_tri)
-    m.transform(obj.matrix_world)
+    m.transform(obj.matrix_world)                                   # TODO Make apply transforms optional
     
     ba_pos = 0
     for p in m.polygons:
@@ -130,6 +130,10 @@ def vertex_group_ids_to_bitmask(vertex):
     for group in list:
         masked |= 1 << group
     return masked
+
+def mat_name_to_index(val):
+    """Return the index of the material with the given name in bpy.data.materials"""
+    return bpy.data.materials.find(val)
 
 # Stuff to export physics
 def object_physics_to_json(obj):
@@ -421,7 +425,9 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 write_object_ba(s,obj,desc_per_object[obj],ba_per_object[obj],i,self.reverse_loop)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
-        f = open(root + ".vbx","wb")
+        fn, ext = splitext(fname)
+        batch_path = root + ".vbx"
+        f = open(batch_path,"wb")
         
         offset = {}
         for obj in mesh_selection:
@@ -440,6 +446,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 "data":data
             }
         }
+        
         def object_to_json(obj):
             """Returns the data of the object in a json-compatible form"""
             result = {}
@@ -483,14 +490,18 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Export bpy.data
         data_to_export = ['cameras','lamps','speakers','armatures','materials','textures','actions','curves','groups']
         for datatype in data_to_export:
-            data[datatype] = [object_to_json(obj) for obj in getattr(bpy.data,datatype)]
+            #data[datatype] = [object_to_json(obj) for obj in getattr(bpy.data,datatype)]
+            data[datatype] = {obj.name:object_to_json(obj) for obj in getattr(bpy.data,datatype)}
         
         # Export additional info that might be useful
         json_data["blmod"] = {
-            "format":[{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format],
+            "mesh_data":{
+                "location":fn + ".vbx",
+                "format":[{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
+            },
             "no_frames":frame_count,
             "blender_version":bpy.app.version[:],
-            "version":bl_info["version"]
+            "version":bl_info["version"],
         }
         
         # Save textures (TODO: clean this up!)
