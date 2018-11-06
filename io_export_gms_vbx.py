@@ -33,14 +33,15 @@ def fetch_attribs(desc,node,ba,byte_pos,frame):
                 val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
                 ba[frame-index][ind:ind+attr_blen] = val_bin
 
-def write_object_ba(scene,obj,desc,ba,frame,reverse_loop):
+def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
     """Traverse the object's mesh data at the given frame and write to the appropriate bytearray in ba using the description data structure provided"""
     desc, vertex_format_bytesize = desc
     
     mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
     m = obj.to_mesh(bpy.context.scene,True,'RENDER')
     obj.modifiers.remove(mod_tri)
-    m.transform(obj.matrix_world)                                   # TODO Make apply transforms optional
+    if apply_transforms:
+        m.transform(obj.matrix_world)
     
     ba_pos = 0
     for p in m.polygons:
@@ -307,6 +308,12 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         description="Whether to export mesh data to a separate, binary file (.vbx)",
     )
     
+    apply_transforms = BoolProperty(
+        name="Apply Transforms",
+        default=True,
+        description="Whether to apply object transforms to mesh data",
+    )
+    
     vertex_format = CollectionProperty(
         name="Vertex Format",
         type=bpy.types.AttributeType,
@@ -422,7 +429,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             
             # Now add frame vertex data for the current object
             for obj in mesh_selection:
-                write_object_ba(s,obj,desc_per_object[obj],ba_per_object[obj],i,self.reverse_loop)
+                write_object_ba(s,obj,desc_per_object[obj],ba_per_object[obj],i,self.reverse_loop,self.apply_transforms)
         
         # Final step: write all bytearrays to one or more file(s) in one or more directories
         fn, ext = splitext(fname)
@@ -437,6 +444,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 f.write(b)
         
         f.close()
+        
+        
         
         # Create JSON description file
         ctx, data = {}, {}
@@ -497,8 +506,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         json_data["blmod"] = {
             "mesh_data":{
                 "location":fn + ".vbx",
-                "format":[{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format]
+                "format":[{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format],
+                "ranges":{obj.name:{"no_verts":no_verts_per_object[obj],"offset":offset[obj]} for obj in mesh_selection},
             },
+            "settings":{"apply_transforms":self.apply_transforms},
             "no_frames":frame_count,
             "blender_version":bpy.app.version[:],
             "version":bl_info["version"],
