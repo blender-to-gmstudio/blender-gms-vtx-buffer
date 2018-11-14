@@ -373,6 +373,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         box.label("Transforms:")
         
+        box.prop(self,"apply_transforms")
         box.prop(self,'handedness')
         box.prop(self,'reverse_loop')
         
