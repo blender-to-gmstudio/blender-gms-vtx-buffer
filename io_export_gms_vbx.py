@@ -308,6 +308,34 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         description="Whether to export mesh data to a separate, binary file (.vbx)",
     )
     
+    export_json_data = BoolProperty(
+        name="Export Object Data",
+        default = True,
+        description="Whether to export blender data (bpy.data) in JSON format",
+    )
+    
+    object_types_to_export = EnumProperty(
+        name="Object Types",
+        description="Which types of object data to export",
+        options = {'ENUM_FLAG'},
+        items=(('cameras',"Cameras","Export cameras"),
+               ('lamps',"Lamps","Export lamps"),
+               ('speakers',"Speakers","Export speakers"),
+               ('armatures',"Armatures","Export armatures"),
+               ('materials',"Materials","Export materials"),
+               ('textures',"Textures","Export textures"),
+               ('actions',"Actions","Export actions"),
+               ('curves',"Curves","Export curves"),
+               ('groups',"Groups","Export groups"),
+        )
+    )
+    
+    export_json_filter = BoolProperty(
+        name="Filter Selection",
+        default = True,
+        description="Whether to filter data in bpy.data based on selection",
+    )
+    
     apply_transforms = BoolProperty(
         name="Apply Transforms",
         default=True,
@@ -368,6 +396,15 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                 row.prop(item,'int')
                 opt_remove = row.operator("export_scene.remove_attribute_operator",text="Remove")
                 opt_remove.id = index
+        
+        box = layout.box()
+        
+        box.label("Object Data:")
+        box.prop(self,"export_json_data")
+        
+        if self.export_json_data == True:
+            box.prop(self,"export_json_filter")
+            box.prop(self,"object_types_to_export")
         
         box = layout.box()
         
@@ -498,7 +535,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         ctx["scene"] = {"render":{"layers":[{layer.name:[i for i in layer.layers]} for layer in context.scene.render.layers]}}
         
         # Export bpy.data
-        data_to_export = ['cameras','lamps','speakers','armatures','materials','textures','actions','curves','groups']
+        #data_to_export = ['cameras','lamps','speakers','armatures','materials','textures','actions','curves','groups']
+        data_to_export = self.object_types_to_export
         for datatype in data_to_export:
             #data[datatype] = [object_to_json(obj) for obj in getattr(bpy.data,datatype)]
             data[datatype] = {obj.name:object_to_json(obj) for obj in getattr(bpy.data,datatype)}
