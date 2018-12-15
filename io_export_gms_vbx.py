@@ -54,14 +54,16 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
             fetch_attribs(desc,p,ba,ba_pos,frame)
             
             mat = m.materials[p.material_index]
-            fetch_attribs(desc,mat,ba,ba_pos,frame)
+            if not mat.use_nodes:
+                fetch_attribs(desc,mat,ba,ba_pos,frame)
             
             loop = m.loops[li]
             fetch_attribs(desc,loop,ba,ba_pos,frame)
             
-            uvs = m.uv_layers.active.data
-            uv = uvs[loop.index]                                # Use active uv layer
-            fetch_attribs(desc,uv,ba,ba_pos,frame)
+            if not mat.use_nodes:
+                uvs = m.uv_layers.active.data
+                uv = uvs[loop.index]                                # Use active uv layer
+                fetch_attribs(desc,uv,ba,ba_pos,frame)
             
             vertex = m.vertices[loop.vertex_index]
             fetch_attribs(desc,vertex,ba,ba_pos,frame)
@@ -557,9 +559,11 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         # Save textures (TODO: clean this up!)
         if self.export_textures:
             for obj in mesh_selection:                              # Only mesh objects have texture slots
+                tex_slot = None
                 for ms in obj.material_slots:
                     mat = ms.material
-                    tex_slot = mat.texture_slots[0]
+                    if not mat.use_nodes:
+                        tex_slot = mat.texture_slots[0]
                 if tex_slot != None:
                     image = tex_slot.texture.image
                     image.save_render(base + '/' + image.name,context.scene)
