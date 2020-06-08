@@ -181,17 +181,44 @@ def object_get_diffuse_color(obj):
     else:
         return (1.0,1.0,1.0)
 
-# Custom type to be used in collection
-class AttributeType(bpy.types.PropertyGroup):
-    # Getter and setter functions
-    def test_cb(self,context):
-        props = getattr(bpy.types,self.type).bl_rna.properties
+op = None
+def items_callback(self, context):
+    global op                       # Ugly way to keep a reference to the Blender exporter operator...
+    #op = context.active_operator
+    index = 0
+    dp = None
+    for attrib in op.vertex_format:
+        try:
+            dp = attrib.datapath
+            index = dp.values().index(self)
+            break
+        except ValueError:
+            continue
+    
+    if index == 0:
+        supported_sources = {'MeshVertex','MeshLoop','MeshUVLoop','ShapeKeyPoint','VertexGroupElement','Material','MeshLoopColor','MeshPolygon','Scene','Object'}
+        items = []
+        for src in supported_sources:
+            rna = getattr(bpy.types,src).bl_rna
+            items.append((rna.identifier,rna.name,rna.description))
+        return items
+    else:
+        value = dp[index-1].node
+        props = getattr(bpy.types,value).bl_rna.properties
         items = [(p.identifier,p.name,p.description) for p in props]
         return items
-    
-    #def update_type(self, context):
-    #    self.attr = test_cb(self,context)
-    
+
+class DataPathType(bpy.types.PropertyGroup):
+    node = bpy.props.EnumProperty(
+        name="",
+        description="Node",
+        items=items_callback,
+    )
+
+bpy.utils.register_class(DataPathType)
+
+# Custom type to be used in collection
+class VertexAttributeType(bpy.types.PropertyGroup):
     def set_format_from_type(self, context):
         attr = getattr(bpy.types,self.type).bl_rna.properties[self.attr]
         map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # TODO: extend this list a bit more
@@ -207,8 +234,7 @@ class AttributeType(bpy.types.PropertyGroup):
         source_items.append((rna.identifier,rna.name,rna.description))
     
     # Actual properties
-    type = bpy.props.EnumProperty(name="Source", description="Where to get the data from", items=source_items, default="MeshVertex", update = set_format_from_type)
-    attr = bpy.props.EnumProperty(name="Attribute", description="Which attribute to get", items=test_cb, update = set_format_from_type)
+    datapath = bpy.props.CollectionProperty(name="Path",type=DataPathType)
     fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int = bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
     func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="")
@@ -223,7 +249,9 @@ class AddAttributeOperator(Operator):
 
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
-        context.active_operator.vertex_format.add()
+        item = context.active_operator.vertex_format.add()
+        item.datapath.add()
+        item.datapath.add()
         return {'FINISHED'}
 
 class RemoveAttributeOperator(Operator):
@@ -239,7 +267,7 @@ class RemoveAttributeOperator(Operator):
         return {'FINISHED'}
 
 # Register these here already
-bpy.utils.register_class(AttributeType)
+bpy.utils.register_class(VertexAttributeType)
 bpy.utils.register_class(AddAttributeOperator)
 bpy.utils.register_class(RemoveAttributeOperator)
 
@@ -252,8 +280,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     bl_options = {'PRESET'}                 # Allow presets of exporter configurations
     
     def __init__(self):
+        global op
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
+        op = self
     
     # ExportHelper mixin class uses this
     filename_ext = ".json"
@@ -346,7 +376,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     
     vertex_format = CollectionProperty(
         name="Vertex Format",
-        type=bpy.types.AttributeType,
+        type=bpy.types.VertexAttributeType,
     )
     
     join_into_active = BoolProperty(
@@ -381,7 +411,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         
         box = layout.box()
         
-        box.label("Mesh Data:")
+        box.label(text="Mesh Data:",text_ctxt="",translate=True,icon='MESH_DATA')
         box.prop(self,"export_mesh_data")
         
         if self.export_mesh_data == True:
@@ -391,8 +421,8 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             
             for index, item in enumerate(self.vertex_format):
                 row = box.row()
-                row.prop(item,'type')
-                row.prop(item,'attr')
+                for node in item.datapath:
+                    row.prop(node,'node')
                 row.prop(item,'fmt')
                 row.prop(item,'func')
                 row.prop(item,'int')
@@ -444,8 +474,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
         
-        # Attribs
-        attribs = [(i.type,i.attr,i.fmt,i.int,None if i.func == "" else globals()[i.func]) for i in self.vertex_format]
+        attribs = [(i.datapath[0].node,i.datapath[1].node,i.fmt,i.int,None if i.func == "" else globals()[i.func]) for i in self.vertex_format]
         #print(attribs)
         
         # << Prepare a structure to map vertex attributes to the actual contents >>
@@ -547,7 +576,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         json_data["blmod"] = {
             "mesh_data":{
                 "location":fn + ".vbx",
-                "format":[{"type":x.type,"attr":x.attr,"fmt":x.fmt} for x in self.vertex_format],
+                "format":[{"type":x.datapath[0].node,"attr":x.datapath[1].node,"fmt":x.fmt} for x in self.vertex_format],
                 "ranges":{obj.name:{"no_verts":no_verts_per_object[obj],"offset":offset[obj]} for obj in mesh_selection},
             },
             "settings":{"apply_transforms":self.apply_transforms},
