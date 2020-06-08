@@ -2,11 +2,11 @@ bl_info = {
     "name": "Export GM:Studio BLMod",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 8, 1),
+    "version": (0, 8, 2),
     "blender": (2, 79, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
-    "wiki_url": "https://github.com/bartteunis/blender-gms-vbx/wiki",
+    "wiki_url": "",
     "category": "Import-Export"}
 
 # Required imports
