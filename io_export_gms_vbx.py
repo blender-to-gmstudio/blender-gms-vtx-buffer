@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GM:Studio BLMod",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 8, 2),
+    "version": (0, 8, 3),
     "blender": (2, 79, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -13,12 +13,17 @@ bl_info = {
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty, CollectionProperty
 from bpy.types import Object, Operator, PropertyGroup
+from inspect import getmembers, isfunction
 import bpy
+import bpy.utils
 import shutil                       # for image file copy
 import json
+import os
 from os import path, makedirs
 from os.path import splitext, split
 from struct import pack, calcsize
+
+import conversions
 
 # Put this one here in global space for now...
 op = None
@@ -111,35 +116,6 @@ def construct_ba(obj,desc,frame_count):
     return ba, no_verts
 
 ### End of Export Function Definitions ###
-
-# Conversion functions (go into the globals() dictionary for now...)
-def float_to_byte(val):
-    """Convert value in range [0,1] to an integer value in range [0,255]"""
-    return int(val*255)
-
-def vec_to_bytes(val):
-    """Convert a list of values in range [0,1] to a list of integer values in range [0,255]"""
-    return [int(x*255) for x in val]
-
-def invert_v(val):
-    """Invert the v coordinate of a (u,v) pair"""
-    return [val[0],1-val[1]]
-
-def invert_y(val):
-    """Invert the y coordinate of a vector"""
-    return [val[0],-val[1],val[2]]
-
-def vertex_group_ids_to_bitmask(vertex):
-    """Return a bitmask containing the vertex groups a vertex belongs to"""
-    list = [x.group for x in vertex.groups]
-    masked = 0
-    for group in list:
-        masked |= 1 << group
-    return masked
-
-def mat_name_to_index(val):
-    """Return the index of the material with the given name in bpy.data.materials"""
-    return bpy.data.materials.find(val)
 
 # Stuff to export physics
 def object_physics_to_json(obj):
@@ -284,23 +260,29 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             id = getattr(bpy.types,src)
             rna = id.bl_rna
             source_items.append((rna.identifier,rna.name,rna.description))
+            
+        def conversion_list(self, context):
+            item_list = []
+            item_list.append(("none", "None", "Don't convert the value"))
+            item_list.extend([(o[0],o[1].__name__,o[1].__doc__) for o in getmembers(conversions,isfunction)])
+            print(item_list)
+            return item_list
         
         # Actual properties
         datapath = bpy.props.CollectionProperty(name="Path",type=DataPathType)
-        fmt = bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
+        fmt = bpy.props.StringProperty(name="Fmt", description="The format string to be used for the binary data", default="fff")
         int = bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
-        func = bpy.props.StringProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", default="", update=None)
-        #func = bpy.props.EnumProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format - must exist in globals()", items=[("","",""),("float_to_byte","float_to_byte",""),("vec_to_bytes","vec_to_bytes",""),("invert_v","invert_v",""),("invert_y","invert_y",""),("vertex_group_ids_to_bitmask","vertex_group_ids_to_bitmask","")], default="")
+        func = bpy.props.EnumProperty(name="Func", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
 
     bpy.utils.register_class(VertexAttributeType)
     
     def __init__(self):
         global op
+        op = self
         
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
         
-        op = self
         #print("1 - " + str(id(self)))
     
     # ExportHelper mixin class uses this
@@ -492,7 +474,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
         for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
         
-        attribs = [(i.datapath[0].node,i.datapath[1].node,i.fmt,i.int,None if i.func == "" else globals()[i.func]) for i in self.vertex_format]
+        attribs = [(i.datapath[0].node,i.datapath[1].node,i.fmt,i.int,None if i.func == "none" else getattr(conversions,i.func)) for i in self.vertex_format]
         #print(attribs)
         
         # << Prepare a structure to map vertex attributes to the actual contents >>
