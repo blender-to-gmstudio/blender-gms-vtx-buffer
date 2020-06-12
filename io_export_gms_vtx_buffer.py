@@ -1,12 +1,12 @@
 bl_info = {
-    "name": "Export GM:Studio BLMod",
+    "name": "Export GameMaker:Studio Vertex Buffer",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 8, 3),
+    "version": (0, 8, 4),
     "blender": (2, 79, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
-    "wiki_url": "",
+    "wiki_url": "https://github.com/blender-to-gmstudio/blender-gms-vbx/wiki",
     "category": "Import-Export"}
 
 # Required imports
@@ -28,147 +28,13 @@ import conversions
 # Put this one here in global space for now...
 op = None
 
-### Export Function Definitions ###
-def fetch_attribs(desc,node,ba,byte_pos,frame):
-    """"Fetch the attribute values from the given node and place in ba at byte_pos"""
-    id = node.bl_rna.identifier
-    if id in desc:
-        for prop, occurences in desc[id].items():                   # Property name and occurences in bytedata
-            for offset, attr_blen, fmt, index, func in occurences:  # Each occurence's data (tuple assignment!)
-                ind = byte_pos+offset
-                val = getattr(node,prop)
-                if func != None: val = func(val)
-                val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
-                ba[frame-index][ind:ind+attr_blen] = val_bin
-
-def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
-    """Traverse the object's mesh data at the given frame and write to the appropriate bytearray in ba using the description data structure provided"""
-    desc, vertex_format_bytesize = desc
-    
-    mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
-    m = obj.to_mesh(bpy.context.scene,True,'RENDER')
-    obj.modifiers.remove(mod_tri)
-    if apply_transforms:
-        m.transform(obj.matrix_world)
-    
-    ba_pos = 0
-    for p in m.polygons:
-        # Loop through vertices
-        iter = reversed(p.loop_indices) if reverse_loop else p.loop_indices
-        for li in iter:
-            fetch_attribs(desc,scene,ba,ba_pos,frame)
-            fetch_attribs(desc,obj,ba,ba_pos,frame)
-            
-            fetch_attribs(desc,p,ba,ba_pos,frame)
-            
-            mat = m.materials[p.material_index]
-            if not mat.use_nodes:
-                fetch_attribs(desc,mat,ba,ba_pos,frame)
-            
-            loop = m.loops[li]
-            fetch_attribs(desc,loop,ba,ba_pos,frame)
-            
-            if not mat.use_nodes:
-                uvs = m.uv_layers.active.data
-                uv = uvs[loop.index]                                # Use active uv layer
-                fetch_attribs(desc,uv,ba,ba_pos,frame)
-            
-            vertex = m.vertices[loop.vertex_index]
-            fetch_attribs(desc,vertex,ba,ba_pos,frame)
-            
-            # We wrote a full vertex, so we can now increment the bytearray position by the vertex format size
-            ba_pos += vertex_format_bytesize
-    
-    bpy.data.meshes.remove(m)
-
-def construct_ds(obj,attr):
-    """Constructs the data structure required to move through the attributes of a given object"""
-    desc, offset = {}, 0
-    
-    for a in attr:
-        ident, atn, format, fo, func = a
-        
-        if ident not in desc:
-            desc[ident] = {}
-        dct_obj = desc[ident]
-        
-        if atn not in dct_obj:
-            dct_obj[atn] = []
-        lst_attr = dct_obj[atn]
-        
-        prop_rna = getattr(bpy.types,ident).bl_rna.properties[atn]
-        attrib_bytesize = calcsize(format)
-        
-        lst_attr.append((offset,attrib_bytesize,format,fo,func))
-        offset += attrib_bytesize
-        
-    return (desc, offset)
-
-def construct_ba(obj,desc,frame_count):
-    """Construct the required bytearrays to store vertex data for the given object for the given number of frames"""
-    mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
-    m = obj.to_mesh(bpy.context.scene,True,'RENDER')
-    obj.modifiers.remove(mod_tri)
-    no_verts = len(m.polygons) * 3
-    bpy.data.meshes.remove(m)                                   # Any easier way to get number of vertices??
-    desc, vertex_format_bytesize = desc
-    ba = [bytearray([0] * no_verts * vertex_format_bytesize) for i in range(0,frame_count)]
-    return ba, no_verts
-
-### End of Export Function Definitions ###
-
-# Stuff to export physics
-def object_physics_to_json(obj):
-    """For objects of type 'MESH', exports all edge loops that make up a face or polygon. Each one becomes a chain fixture in Game Maker."""
-    physics_props = {'angular_damping','collision_shape','enabled','friction','kinematic','linear_damping','mass','restitution','type'}
-    b = obj.rigid_body
-    
-    if b == None:
-        return {}
-    
-    physics_settings = {x:b.path_resolve(x) for x in physics_props}
-    physics_settings['collision_group'] = [i for i, x in enumerate(b.collision_groups) if x == True][0]
-    
-    # Get reference to object data
-    d = obj.data
-    
-    # Select the necessary stuff
-    if b.collision_shape == 'MESH':
-        physics_settings['coords'] = []
-        for poly in d.polygons:
-            vtx_indices = [d.loops[x].vertex_index for x in poly.loop_indices]
-            ordered_verts = [d.vertices[x].co.xy[:] for x in vtx_indices]
-            physics_settings['coords'].append(ordered_verts)
-    
-    return physics_settings
-
-def object_get_texture_name(obj):
-    """Returns the name of the texture image if the object has one defined"""
-    tex_name = ""
-    for ms in obj.material_slots:
-        mat = ms.material
-        if mat != None:
-            ts = mat.texture_slots[0]
-            if (ts != None):
-                tex = ts.texture
-                tex_name = tex.image.name
-    return tex_name
-
-def object_get_diffuse_color(obj):
-    if (len(obj.material_slots) > 0):
-        return obj.material_slots[0].material.diffuse_color[:]
-    else:
-        return (1.0,1.0,1.0)
-
 # ExportHelper is a helper class, defines filename and
 # invoke() function which calls the file selector.
 class ExportGMSVertexBuffer(Operator, ExportHelper):
     """Export (parts of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
-    bl_idname = "export_scene.gms_blmod" # important since its how bpy.ops.export_scene.gms_blmod is constructed
-    bl_label = "Export GM:Studio BLMod"
+    bl_idname = "export_scene.gms_vtx_buffer"    # important since its how bpy.ops.export_scene.gms_vtx_buffer is constructed
+    bl_label = "Export GM:Studio Vertex Buffer"
     bl_options = {'PRESET'}                 # Allow presets of exporter configurations
-    
-    op = None
     
     @classmethod
     def register(cls):
@@ -455,6 +321,96 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         box.prop(self,'export_textures')
 
     def execute(self, context):
+        ### Export Function Definitions ###
+        def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
+            """Traverse the object's mesh data at the given frame and write to the appropriate bytearray in ba using the description data structure provided"""
+            desc, vertex_format_bytesize = desc
+            
+            ### def fetch attribs ###
+            def fetch_attribs(desc,node,ba,byte_pos,frame):
+                """"Fetch the attribute values from the given node and place in ba at byte_pos"""
+                id = node.bl_rna.identifier
+                if id in desc:
+                    for prop, occurences in desc[id].items():                   # Property name and occurences in bytedata
+                        for offset, attr_blen, fmt, index, func in occurences:  # Each occurence's data (tuple assignment!)
+                            ind = byte_pos+offset
+                            val = getattr(node,prop)
+                            if func != None: val = func(val)
+                            val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
+                            ba[frame-index][ind:ind+attr_blen] = val_bin
+            ### End of def fetch attribs ###
+            
+            mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
+            m = obj.to_mesh(bpy.context.scene,True,'RENDER')
+            obj.modifiers.remove(mod_tri)
+            if apply_transforms:
+                m.transform(obj.matrix_world)
+            
+            ba_pos = 0
+            for p in m.polygons:
+                # Loop through vertices
+                iter = reversed(p.loop_indices) if reverse_loop else p.loop_indices
+                for li in iter:
+                    fetch_attribs(desc,scene,ba,ba_pos,frame)
+                    fetch_attribs(desc,obj,ba,ba_pos,frame)
+                    
+                    fetch_attribs(desc,p,ba,ba_pos,frame)
+                    
+                    mat = m.materials[p.material_index]
+                    if not mat.use_nodes:
+                        fetch_attribs(desc,mat,ba,ba_pos,frame)
+                    
+                    loop = m.loops[li]
+                    fetch_attribs(desc,loop,ba,ba_pos,frame)
+                    
+                    if not mat.use_nodes:
+                        uvs = m.uv_layers.active.data
+                        uv = uvs[loop.index]                                # Use active uv layer
+                        fetch_attribs(desc,uv,ba,ba_pos,frame)
+                    
+                    vertex = m.vertices[loop.vertex_index]
+                    fetch_attribs(desc,vertex,ba,ba_pos,frame)
+                    
+                    # We wrote a full vertex, so we can now increment the bytearray position by the vertex format size
+                    ba_pos += vertex_format_bytesize
+            
+            bpy.data.meshes.remove(m)
+        
+        def construct_ds(obj,attr):
+            """Constructs the data structure required to move through the attributes of a given object"""
+            desc, offset = {}, 0
+            
+            for a in attr:
+                ident, atn, format, fo, func = a
+                
+                if ident not in desc:
+                    desc[ident] = {}
+                dct_obj = desc[ident]
+                
+                if atn not in dct_obj:
+                    dct_obj[atn] = []
+                lst_attr = dct_obj[atn]
+                
+                prop_rna = getattr(bpy.types,ident).bl_rna.properties[atn]
+                attrib_bytesize = calcsize(format)
+                
+                lst_attr.append((offset,attrib_bytesize,format,fo,func))
+                offset += attrib_bytesize
+                
+            return (desc, offset)
+        
+        def construct_ba(obj,desc,frame_count):
+            """Construct the required bytearrays to store vertex data for the given object for the given number of frames"""
+            mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
+            m = obj.to_mesh(bpy.context.scene,True,'RENDER')
+            obj.modifiers.remove(mod_tri)
+            no_verts = len(m.polygons) * 3
+            bpy.data.meshes.remove(m)                                   # Any easier way to get number of vertices??
+            desc, vertex_format_bytesize = desc
+            ba = [bytearray([0] * no_verts * vertex_format_bytesize) for i in range(0,frame_count)]
+            return ba, no_verts
+        ### End of Export Function Definitions ###
+        
         # Prepare a bit
         root, ext = splitext(self.filepath)
         base, fname = split(self.filepath)
@@ -612,7 +568,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
 
 # Only needed if you want to add into a dynamic menu
 def menu_func_export(self, context):
-    self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GM:Studio BLMod (*.json + *.vbx)")
+    self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GM:Studio Vertex Buffer (*.json + *.vbx)")
 
 
 def register():
