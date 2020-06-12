@@ -355,14 +355,15 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     
                     fetch_attribs(desc,p,ba,ba_pos,frame)
                     
-                    mat = m.materials[p.material_index]
-                    if not mat.use_nodes:
-                        fetch_attribs(desc,mat,ba,ba_pos,frame)
+                    if (len(m.materials) > 0):
+                        mat = m.materials[p.material_index]
+                        if not mat.use_nodes:
+                            fetch_attribs(desc,mat,ba,ba_pos,frame)
                     
                     loop = m.loops[li]
                     fetch_attribs(desc,loop,ba,ba_pos,frame)
                     
-                    if not mat.use_nodes:
+                    if (len(m.uv_layers) > 0):
                         uvs = m.uv_layers.active.data
                         uv = uvs[loop.index]                                # Use active uv layer
                         fetch_attribs(desc,uv,ba,ba_pos,frame)
