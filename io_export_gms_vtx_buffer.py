@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GameMaker:Studio Vertex Buffer",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (0, 8, 4),
+    "version": (1, 0, 0),
     "blender": (2, 79, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -518,7 +518,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                             result[prop_id] = prop_ins[:]
                     else:
                         result[prop_id] = prop_ins
-            #print(result)
             return result
         
         # Export bpy.context
@@ -558,11 +557,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
                     image.save_render(base + '/' + image.name,context.scene)
         
         # Write to file
-        f_desc = open(root + ".json","w")
-        
-        json.dump(json_data,f_desc)
-        
-        f_desc.close()
+        if (self.export_json_data):
+            f_desc = open(root + ".json","w")
+            json.dump(json_data,f_desc)
+            f_desc.close()
         
         # Cleanup: remove dynamic property from class
         del bpy.types.Object.batch_index
