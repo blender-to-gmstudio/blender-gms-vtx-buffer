@@ -16,7 +16,7 @@ This exporter supports multiple materials and is meant for all kinds of models.
 ## Installing the plugin in Blender
 * In Blender < 2.8, go to `File` > `User Preferences`
 * Go to tab `Add-ons` and select `Install from File...`
-* Navigate to the directory that contains the file `blender-gms-vbx.zip`
+* Navigate to the directory that contains the file `blender-gms-vtx-buffer.zip`
 * Confirm
 * Tick the checkbox next to `Import-Export: Export GameMaker:Studio Vertex Buffer`
 * Click `Save User Settings`
