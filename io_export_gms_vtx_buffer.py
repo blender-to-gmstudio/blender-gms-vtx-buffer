@@ -318,6 +318,10 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
         box.prop(self,'join_into_active')
         box.prop(self,'split_by_material')
         box.prop(self,'export_textures')
+    
+    def cancel(self, context):
+        # Cleanup: remove dynamic property from class
+        del bpy.types.Object.batch_index
 
     def execute(self, context):
         ### Export Function Definitions ###
