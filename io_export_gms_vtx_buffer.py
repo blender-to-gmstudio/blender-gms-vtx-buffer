@@ -36,14 +36,6 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
     bl_label = "Export GM:Studio Vertex Buffer"
     bl_options = {'PRESET'}                 # Allow presets of exporter configurations
     
-    @classmethod
-    def register(cls):
-        pass
-
-    @classmethod
-    def unregister(cls):
-        pass
-    
     # Operators to get the vertex format customization add/remove to work
     # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel
     class AddAttributeOperator(Operator):
@@ -70,8 +62,15 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             context.active_operator.vertex_format.remove(self.id)
             return {'FINISHED'}
     
-    bpy.utils.register_class(AddAttributeOperator)
-    bpy.utils.register_class(RemoveAttributeOperator)
+    @classmethod
+    def register(cls):
+        bpy.utils.register_class(cls.AddAttributeOperator)
+        bpy.utils.register_class(cls.RemoveAttributeOperator)
+
+    @classmethod
+    def unregister(cls):
+        bpy.utils.unregister_class(cls.AddAttributeOperator)
+        bpy.utils.unregister_class(cls.RemoveAttributeOperator)
     
     # Custom type to be used in collection
     class VertexAttributeType(bpy.types.PropertyGroup):
@@ -131,7 +130,7 @@ class ExportGMSVertexBuffer(Operator, ExportHelper):
             item_list = []
             item_list.append(("none", "None", "Don't convert the value"))
             item_list.extend([(o[0],o[1].__name__,o[1].__doc__) for o in getmembers(conversions,isfunction)])
-            print(item_list)
+            #print(item_list)
             return item_list
         
         # Actual properties
