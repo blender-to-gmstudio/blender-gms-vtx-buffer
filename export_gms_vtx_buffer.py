@@ -1,26 +1,16 @@
 import bpy
-#import shutil  # for image file copy
-import os
-import conversions
-from os import (
-    path,
-    makedirs,
-    )
-from os.path import (
-    splitext,
-    split,
-    )
 from struct import (
     pack,
-    calcsize,
     )
 
+"""
 def triangulated_mesh(obj):
     import bmesh
     mod_tri = obj.modifiers.new('triangulate_for_export','TRIANGULATE')
     mesh = obj.to_mesh(preserve_all_data_layers=True,depsgraph=bpy.context.evaluated_depsgraph_get())
     obj.modifiers.remove(mod_tri)
     return mesh
+"""
 
 
 def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
@@ -82,6 +72,8 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
 
 def construct_ds(obj,attr):
     """Constructs the data structure required to move through the attributes of a given object"""
+    from struct import calcsize
+    
     desc, offset = {}, 0
     
     for a in attr:
@@ -159,6 +151,8 @@ def export(self, context):
     """Main entry point for export"""
     # TODO Get rid of context in this function
     
+    from os.path import split, splitext
+    
     # Prepare a bit
     root, ext = splitext(self.filepath)
     base, fname = split(self.filepath)
@@ -168,17 +162,9 @@ def export(self, context):
     mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
     for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
     
+    # Export mesh data to buffer
     if self.export_mesh_data:
-    # Join step
-        if self.join_into_active:
-            bpy.ops.object.join()
-        
-        # TODO: transformation and axes step
-        
-        
-        # Split by material
-        if self.split_by_material:
-            bpy.ops.mesh.separate(type='MATERIAL')
+        import conversions
         
         attribs = [(i.datapath[0].node,i.datapath[1].node,i.fmt,i.int,None if i.func == "none" else getattr(conversions,i.func)) for i in self.vertex_format]
         #print(attribs)
@@ -255,8 +241,8 @@ def export(self, context):
         json.dump(json_data,f_desc)
         f_desc.close()
     
-    # Save textures (TODO: clean this up!)
-    if self.export_textures:
+    # Save images (TODO: clean this up!)
+    if self.export_images:
         for obj in mesh_selection:                              # Only mesh objects have texture slots
             tex_slot = None
             for ms in obj.material_slots:

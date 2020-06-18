@@ -26,6 +26,7 @@ from bpy.props import (
     )
 from bpy_extras.io_utils import (
     ExportHelper,
+    orientation_helper,
     )
 from inspect import (
     getmembers,
@@ -94,6 +95,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
     int : bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
     func : bpy.props.EnumProperty(name="Func", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
 
+@orientation_helper(axis_forward='-Z', axis_up='Y')
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     """Export (a selection of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
     bl_idname = "export_scene.gms_vtx_buffer"
@@ -144,15 +146,6 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         )
     )
     
-    
-    handedness : EnumProperty(
-        name="Handedness",
-        description="Handedness of the coordinate system to be used",
-        items=(('rh',"Right handed",""),
-               ('lh',"Left handed",""),
-        )
-    )
-    
     export_mesh_data : BoolProperty(
         name="Export Mesh Data",
         default=False,
@@ -181,32 +174,14 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         )
     )
     
-    export_json_filter : BoolProperty(
-        name="Filter Selection",
-        default=True,
-        description="Whether to filter data in bpy.data based on selection",
-    )
-    
     apply_transforms : BoolProperty(
         name="Apply Transforms",
         default=True,
         description="Whether to apply object transforms to mesh data",
     )
     
-    join_into_active : BoolProperty(
-        name="Join Into Active",
-        default=False,
-        description="Whether to join the selection into the active object",
-    )
-    
-    split_by_material : BoolProperty(
-        name="Split By Material",
-        default=False,
-        description="Whether to split joined mesh by material after joining",
-    )
-    
-    export_textures : BoolProperty(
-        name="Export Textures",
+    export_images : BoolProperty(
+        name="Export Images",
         default=True,
         description="Export texture images to same directory as result file",
     )
@@ -224,7 +199,6 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         return {'RUNNING_MODAL'}
     
     def draw(self, context):
-        # TODO: use Panels!
         layout = self.layout
         
         box = layout.box()
@@ -262,25 +236,24 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         box.prop(self,property="export_json_data")
         
         if self.export_json_data == True:
-            box.prop(self,property="export_json_filter")
-            if self.export_json_filter:
-                box.prop(self,property="object_types_to_export")
+            box.prop(self,property="object_types_to_export")
         
         box = layout.box()
         
         box.label(text="Transforms:",icon='CONSTRAINT')
         
+        row = box.row()
+        row.prop(self,property='axis_forward')
+        row.prop(self,property='axis_up')
+        
         box.prop(self,property="apply_transforms")
-        box.prop(self,property='handedness')
         box.prop(self,property='reverse_loop')
         
         box = layout.box()
         
         box.label(text="Extras:",icon='PLUS')
         
-        box.prop(self,property='join_into_active')
-        box.prop(self,property='split_by_material')
-        box.prop(self,property='export_textures')
+        box.prop(self,property='export_images')
         
     def cancel(self, context):
         #print("operator cancel")
