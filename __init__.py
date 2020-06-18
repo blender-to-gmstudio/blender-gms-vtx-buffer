@@ -207,7 +207,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         
         box.prop(self,property='selection_only')
         box.prop(self,property='frame_option')
-        box.prop(self,property='batch_mode')
+        #box.prop(self,property='batch_mode')
         
         box = layout.box()
         
@@ -242,9 +242,9 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         
         box.label(text="Transforms:",icon='CONSTRAINT')
         
-        row = box.row()
-        row.prop(self,property='axis_forward')
-        row.prop(self,property='axis_up')
+        #row = box.row()
+        #row.prop(self,property='axis_forward')
+        #row.prop(self,property='axis_up')
         
         box.prop(self,property="apply_transforms")
         box.prop(self,property='reverse_loop')
