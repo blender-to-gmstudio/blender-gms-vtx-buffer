@@ -250,6 +250,7 @@ def export(self, context):
                 if not mat.use_nodes:
                     tex_slot = mat.texture_slots[0]
             if tex_slot != None:
+            #if tex_slot:
                 image = tex_slot.texture.image
                 image.save_render(base + '/' + image.name,context.scene)
     

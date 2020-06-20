@@ -73,13 +73,40 @@ class DataPathType(bpy.types.PropertyGroup):
             return items
         else:
             value = dp[index-1].node
+            #print(value)
             props = getattr(bpy.types,value).bl_rna.properties
-            items = [(p.identifier,p.name,p.description) for p in props]
+            items = [(p.identifier,p.name,p.description) for p in props
+                    if p.type not in ['POINTER','STRING','ENUM','COLLECTION']]
             return items
+    def set_format_from_type(self, context):
+        global gms_vbx_operator_instance
+        line = -1
+        for l, attrib in enumerate(gms_vbx_operator_instance.vertex_format):
+            # Which line is this EnumProperty on as seen from the operator?
+            # (Is there any other, better way to do this?)
+            #print(attrib)
+            try:
+                dp = attrib.datapath
+                index = dp.values().index(self)
+                line = l
+                break
+            except ValueError:
+                continue
+        
+        #print(line, index)
+        attribute = gms_vbx_operator_instance.vertex_format[line]
+        if len(attribute.datapath) > 1:
+            type = attribute.datapath[0].node
+            attr = attribute.datapath[1].node
+            att = getattr(bpy.types,type).bl_rna.properties[attr]
+            map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}
+            type = map_fmt.get(att.type,'*')                   # Asterisk '*' means "I don't know what this should be..."
+            attribute.fmt = type * att.array_length if att.is_array else type
     node : bpy.props.EnumProperty(
         name="",
         description="Node",
         items=items_callback,
+        update=set_format_from_type,
     )
 
 class VertexAttributeType(bpy.types.PropertyGroup):
