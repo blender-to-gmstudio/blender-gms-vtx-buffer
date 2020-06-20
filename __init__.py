@@ -289,8 +289,10 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         del bpy.types.Object.batch_index
 
     def execute(self, context):
+        keywords = self.as_keywords(ignore=("check_existing","filter_glob"))
+        
         from . import export_gms_vtx_buffer
-        return export_gms_vtx_buffer.export(self, context)
+        return export_gms_vtx_buffer.export(self, context, **keywords)
 
 # Operators to get the vertex format customization add/remove to work
 # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel
