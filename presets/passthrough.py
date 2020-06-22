@@ -1,7 +1,7 @@
 import bpy
 op = bpy.context.active_operator
 
-op.filepath = 'C:\\Users\\Dev\\Desktop\\data.json'
+op.filepath = 'C:\\Users\\Dev\\Desktop\\cube_passthrough.json'
 op.selection_only = True
 op.vertex_format.clear()
 item_sub_1 = op.vertex_format.add()
@@ -39,16 +39,14 @@ item_sub_2.name = ''
 item_sub_2.node = 'uv'
 item_sub_1.fmt = 'ff'
 item_sub_1.int = 0
-item_sub_1.func = 'none'
-op.reverse_loop = False
+item_sub_1.func = 'invert_v'
+op.reverse_loop = True
 op.frame_option = 'cur'
 op.batch_mode = 'one'
-op.handedness = 'rh'
 op.export_mesh_data = True
 op.export_json_data = False
 op.object_types_to_export = set()
-op.export_json_filter = False
 op.apply_transforms = True
-op.join_into_active = False
-op.split_by_material = False
-op.export_textures = False
+op.export_images = False
+op.axis_forward = '-Z'
+op.axis_up = 'Y'

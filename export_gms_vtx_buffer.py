@@ -47,8 +47,7 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
             
             if (len(m.materials) > 0):
                 mat = m.materials[poly.material_index]
-                if not mat.use_nodes:
-                    fetch_attribs(desc,mat,ba,ba_pos,frame)
+                fetch_attribs(desc,mat,ba,ba_pos,frame)
             
             loop = m.loops[li]
             fetch_attribs(desc,loop,ba,ba_pos,frame)
