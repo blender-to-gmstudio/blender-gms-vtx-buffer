@@ -28,7 +28,7 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
                     ind = byte_pos+offset
                     val = getattr(node,prop)
                     if func != None: val = func(val)
-                    val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val)
+                    val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val[:len(fmt)])
                     ba[frame-index][ind:ind+attr_blen] = val_bin
     
     m = triangulated_mesh_from_object(obj)
@@ -56,6 +56,11 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
                 uvs = m.uv_layers.active.data
                 uv = uvs[loop.index]                                # Use active uv layer
                 fetch_attribs(desc,uv,ba,ba_pos,frame)
+            
+            vtx_colors = m.vertex_colors.active
+            if vtx_colors:
+                vtx_col = vtx_colors.data[li]                       # Vertex colors
+                fetch_attribs(desc,vtx_col,ba,ba_pos,frame)
             
             vertex = m.vertices[loop.vertex_index]
             fetch_attribs(desc,vertex,ba,ba_pos,frame)
@@ -150,7 +155,8 @@ def export(self, context):
     fn = splitext(fname)[0]
     scene = context.scene
     frame_count = scene.frame_end-scene.frame_start+1 if self.frame_option == 'all' else 1
-    mesh_selection = [obj for obj in context.selected_objects if obj.type == 'MESH']
+    object_selection = context.selected_objects if self.selection_only else context.scene.objects
+    mesh_selection = [obj for obj in object_selection if obj.type == 'MESH']
     for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
     
     # Export mesh data to buffer
@@ -203,7 +209,7 @@ def export(self, context):
         }
         
         # Export bpy.context
-        ctx["selected_objects"] = [object_to_json(obj) for obj in bpy.context.selected_objects]
+        ctx["selected_objects"] = [object_to_json(obj) for obj in object_selection]
         #ctx["scene"] = {"view_layers":{"layers":[{layer.name:[i for i in layer.layer_collection]} for layer in context.scene.view_layers]}}
         
         # Export bpy.data
