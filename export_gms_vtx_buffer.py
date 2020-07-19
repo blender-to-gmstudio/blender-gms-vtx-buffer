@@ -161,7 +161,7 @@ def export(self, context):
     
     # Export mesh data to buffer
     if self.export_mesh_data:
-        import conversions
+        from . import conversions
         
         attribs = [(i.datapath[0].node,i.datapath[1].node,i.fmt,i.int,None if i.func == "none" else getattr(conversions,i.func)) for i in self.vertex_format]
         #print(attribs)
