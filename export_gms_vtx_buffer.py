@@ -236,18 +236,29 @@ def export(self, context):
         json.dump(json_data,f_desc)
         f_desc.close()
     
-    # Save images (TODO: clean this up!)
+    # Save images (Cycles and Eevee materials)
     if self.export_images:
-        for obj in mesh_selection:                              # Only mesh objects have texture slots
-            tex_slot = None
-            for ms in obj.material_slots:
-                mat = ms.material
-                if not mat.use_nodes:
-                    tex_slot = mat.texture_slots[0]
-            if tex_slot != None:
-            #if tex_slot:
-                image = tex_slot.texture.image
-                image.save_render(base + '/' + image.name,context.scene)
+        materials = {slot.material for o in mesh_selection for slot in o.material_slots}
+        node_based_materials = [mat for mat in materials if mat.use_nodes]
+        for mat in node_based_materials:
+            ntree = mat.node_tree
+            
+            """
+            # More advanced traversal of tree
+            output_node = [n for n in mat.node_tree.nodes if len(n.outputs) == 0]
+            
+            node = output_node
+            while node:
+                node = node.inputs[0].links[0].from_node    # Phew...
+            """
+            
+            if len(ntree.nodes) > 1:    # Quite a couple of happy assumptions we make here...
+                tex_node = [n for n in ntree.nodes if n.type == 'TEX_IMAGE']
+                if len(tex_node) > 0:
+                    tex_node = tex_node[0]
+                    image = tex_node.image
+                    if image:
+                        image.save_render(base + '/' + image.name,scene=context.scene)
     
     # Cleanup: remove dynamic property from class
     del bpy.types.Object.batch_index
