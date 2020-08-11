@@ -48,6 +48,21 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
             if (len(m.materials) > 0):
                 mat = m.materials[poly.material_index]
                 fetch_attribs(desc,mat,ba,ba_pos,frame)
+                
+                """
+                if mat.use_nodes:
+                    # Get shader node that is directly attached to output node
+                    output_nodes = [n for n in mat.node_tree.nodes if len(n.outputs) == 0]
+                    if len(output_nodes) > 0:
+                        output_node = output_nodes[0]   # Valid output node (only 1!)
+                        attached_node = output_node.inputs[0].links[0].from_node
+                else:
+                    pass
+                """
+                """
+                # Getting the shader values
+                [input.default_value for input in node.inputs if input.type == 'VALUE']
+                """
             
             loop = m.loops[li]
             fetch_attribs(desc,loop,ba,ba_pos,frame)
