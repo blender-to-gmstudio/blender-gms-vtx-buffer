@@ -176,6 +176,11 @@ def export(self, context):
     mesh_selection = [obj for obj in object_selection if obj.type == 'MESH']
     for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
     
+    # FIX for issue #21
+    no_verts_per_object = {}
+    for obj in mesh_selection:
+        no_verts_per_object[obj] = 0
+    
     # Export mesh data to buffer
     if self.export_mesh_data:
         from . import conversions
@@ -185,7 +190,6 @@ def export(self, context):
         
         # << Prepare a structure to map vertex attributes to the actual contents >>
         ba_per_object = {}
-        no_verts_per_object = {}
         desc_per_object = {}
         for obj in mesh_selection:
             desc_per_object[obj] = construct_ds(obj,attribs)
