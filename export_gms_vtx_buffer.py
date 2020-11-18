@@ -178,8 +178,10 @@ def export(self, context):
     
     # FIX for issue #21
     no_verts_per_object = {}
+    offset = {}
     for obj in mesh_selection:
         no_verts_per_object[obj] = 0
+        offset[obj] = 0
     
     # Export mesh data to buffer
     if self.export_mesh_data:
