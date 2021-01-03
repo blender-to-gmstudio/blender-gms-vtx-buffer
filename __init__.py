@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GameMaker:Studio Vertex Buffer",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (1, 0, 5),
+    "version": (1, 0, 7),
     "blender": (2, 82, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -33,75 +33,94 @@ from inspect import (
     isfunction,
     )
 
+# The current operator instance
+# Equals None when exporting via console (direct function call)
 gms_vbx_operator_instance = None
+
+# List of currently supported sources
+supported_sources = {
+    'MeshVertex',
+    'MeshLoop',
+    'MeshUVLoop',
+    #'ShapeKeyPoint',
+    #'VertexGroupElement',
+    'Material',
+    'MeshLoopColor',
+    'MeshPolygon',
+    'Scene',
+    'Object'
+}
+# Constant list containing all possible values at all levels
+items_glob = []
+for src in supported_sources:
+    rna = getattr(bpy.types,src).bl_rna
+    props = rna.properties
+    items_glob.append((rna.identifier,rna.name,rna.description))
+    items_glob.extend([(p.identifier,p.name,p.description) for p in props
+        if p.type not in ['POINTER','STRING','ENUM','COLLECTION']])
 
 class DataPathType(bpy.types.PropertyGroup):
     def items_callback(self, context):
         global gms_vbx_operator_instance
+        #print(gms_vbx_operator_instance)
         index = 0
         dp = None
         #gms_vbx_operator_instance = bpy.ops.export_scene.gms_blmod.get_instance()      # Returns a new instance?
         #gms_vbx_operator_instance = ExportGMSVertexBuffer.gms_vbx_operator_instance    # Doesn't work...
         #print("2 - " + str(id(gms_vbx_operator_instance)))
-        for attrib in gms_vbx_operator_instance.vertex_format:
-            #print(attrib)
-            try:
-                dp = attrib.datapath
-                index = dp.values().index(self)
-                break
-            except ValueError:
-                continue
-        if index == 0:
-            # Currently supported attribute sources,
-            # maintained manually at the moment
-            supported_sources = {
-                'MeshVertex',
-                'MeshLoop',
-                'MeshUVLoop',
-                #'ShapeKeyPoint',
-                #'VertexGroupElement',
-                'Material',
-                'MeshLoopColor',
-                'MeshPolygon',
-                'Scene',
-                'Object'
-                }
-            items = []
-            for src in supported_sources:
-                rna = getattr(bpy.types,src).bl_rna
-                items.append((rna.identifier,rna.name,rna.description))
-            return items
+        if gms_vbx_operator_instance:
+            #print("okay")
+            for attrib in gms_vbx_operator_instance.vertex_format:
+                #print(attrib)
+                try:
+                    dp = attrib.datapath
+                    index = dp.values().index(self)
+                    break
+                except ValueError:
+                    continue
+            if index == 0:
+                global supported_sources
+                items = []
+                for src in supported_sources:
+                    rna = getattr(bpy.types,src).bl_rna
+                    items.append((rna.identifier,rna.name,rna.description))
+                return items
+            else:
+                value = dp[index-1].node
+                #print(value)
+                props = getattr(bpy.types,value).bl_rna.properties
+                items = [(p.identifier,p.name,p.description) for p in props
+                        if p.type not in ['POINTER','STRING','ENUM','COLLECTION']]
+                return items
         else:
-            value = dp[index-1].node
-            #print(value)
-            props = getattr(bpy.types,value).bl_rna.properties
-            items = [(p.identifier,p.name,p.description) for p in props
-                    if p.type not in ['POINTER','STRING','ENUM','COLLECTION']]
-            return items
+            # Return a list of all possible values (direct export via console)
+            return items_glob
+    
     def set_format_from_type(self, context):
         global gms_vbx_operator_instance
-        line = -1
-        for l, attrib in enumerate(gms_vbx_operator_instance.vertex_format):
-            # Which line is this EnumProperty on as seen from the operator?
-            # (Is there any other, better way to do this?)
-            #print(attrib)
-            try:
-                dp = attrib.datapath
-                index = dp.values().index(self)
-                line = l
-                break
-            except ValueError:
-                continue
-        
-        #print(line, index)
-        attribute = gms_vbx_operator_instance.vertex_format[line]
-        if len(attribute.datapath) > 1:
-            type = attribute.datapath[0].node
-            attr = attribute.datapath[1].node
-            att = getattr(bpy.types,type).bl_rna.properties[attr]
-            map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}
-            type = map_fmt.get(att.type,'*')                   # Asterisk '*' means "I don't know what this should be..."
-            attribute.fmt = type * att.array_length if att.is_array else type
+        if gms_vbx_operator_instance:
+            line = -1
+            for l, attrib in enumerate(gms_vbx_operator_instance.vertex_format):
+                # Which line is this EnumProperty on as seen from the operator?
+                # (Is there any other, better way to do this?)
+                #print(attrib)
+                try:
+                    dp = attrib.datapath
+                    index = dp.values().index(self)
+                    line = l
+                    break
+                except ValueError:
+                    continue
+            
+            #print(line, index)
+            attribute = gms_vbx_operator_instance.vertex_format[line]
+            if len(attribute.datapath) > 1:
+                type = attribute.datapath[0].node
+                attr = attribute.datapath[1].node
+                att = getattr(bpy.types,type).bl_rna.properties[attr]
+                map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}
+                type = map_fmt.get(att.type,'*')                   # Asterisk '*' means "I don't know what this should be..."
+                attribute.fmt = type * att.array_length if att.is_array else type
     node : bpy.props.EnumProperty(
         name="",
         description="Node",
@@ -116,8 +135,9 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         item_list.extend([(o[0],o[1].__name__,o[1].__doc__) for o in getmembers(conversions,isfunction)])
         #print(item_list)
         return item_list
+    
     # Actual properties
-    datapath : bpy.props.CollectionProperty(name="Path",type=DataPathType)
+    datapath : bpy.props.CollectionProperty(name="Path", type=DataPathType)
     fmt : bpy.props.StringProperty(name="Fmt", description="The format string to be used for the binary data", default="fff")
     int : bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
     func : bpy.props.EnumProperty(name="Func", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
@@ -289,10 +309,17 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         del bpy.types.Object.batch_index
 
     def execute(self, context):
-        #keywords = self.as_keywords(ignore=("check_existing","filter_glob"))
+        # Putting this here seems to fix #22
+        bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")
+        
+        # This one seems to be required, too?
+        global gms_vbx_operator_instance
+        #gms_vbx_operator_instance = self
         
         from . import export_gms_vtx_buffer
-        return export_gms_vtx_buffer.export(self, context)
+        result = export_gms_vtx_buffer.export(self, context)
+        gms_vbx_operator_instance = None
+        return result
 
 # Operators to get the vertex format customization add/remove to work
 # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel

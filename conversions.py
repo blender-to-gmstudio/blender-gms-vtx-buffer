@@ -1,5 +1,7 @@
 # Conversion functions (add your own here)
 
+from mathutils import *
+
 def float_to_byte(val):
     """Convert value in range [0,1] to an integer value in range [0,255]"""
     return int(val*255)
@@ -27,3 +29,7 @@ def vertex_group_ids_to_bitmask(vertex):
 def mat_name_to_index(val):
     """Return the index of the material with the given name in bpy.data.materials"""
     return bpy.data.materials.find(val)
+
+def dot_with_light_vector(val):
+    """Return the dot product of val with a constant vector"""
+    return val.dot(Vector([0, 0, 1]))

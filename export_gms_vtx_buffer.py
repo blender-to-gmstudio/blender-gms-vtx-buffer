@@ -93,7 +93,6 @@ def construct_ds(obj,attr):
     from struct import calcsize
     
     desc, offset = {}, 0
-    
     for a in attr:
         ident, atn, format, fo, func = a
         
