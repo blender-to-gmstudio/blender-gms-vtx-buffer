@@ -304,6 +304,8 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         
     def cancel(self, context):
         #print("operator cancel")
+        global gms_vbx_operator_instance
+        gms_vbx_operator_instance = None
         
         # Cleanup: remove dynamic property from class
         del bpy.types.Object.batch_index
