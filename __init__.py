@@ -141,6 +141,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
     fmt : bpy.props.StringProperty(name="Fmt", description="The format string to be used for the binary data", default="fff")
     int : bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
     func : bpy.props.EnumProperty(name="Func", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
+    args : bpy.props.StringProperty(name="Args", description="A string representation in JSON of a dictionary with custom arguments to be passed to the function", default="")
 
 @orientation_helper(axis_forward='-Z', axis_up='Y')
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
@@ -273,6 +274,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
                     row.prop(node,property='node')
                 row.prop(item,property='fmt')
                 row.prop(item,property='func')
+                row.prop(item,property='args')
                 row.prop(item,property='int')
                 opt_remove = row.operator("export_scene.remove_attribute_operator",text="Remove")
                 opt_remove.id = index

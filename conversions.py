@@ -1,5 +1,18 @@
 # Conversion functions (add your own here)
 
+# The format is as follows:
+#
+# function_name(value, [context], [custom_args])
+#
+# value is the value currently being written, e.g. the value of MeshVertex.co
+# context contains references to all other sources. It contains the following: 
+#
+# TODO
+#
+# custom_args is a dictionary (map) constructed from
+# the property set in the vertex attribute
+#
+
 from mathutils import *
 
 def float_to_byte(val):
@@ -33,3 +46,7 @@ def mat_name_to_index(val):
 def dot_with_light_vector(val):
     """Return the dot product of val with a constant vector"""
     return val.dot(Vector([0, 0, 1]))
+
+def constant_from_map(val, args):
+    """Return a constant value from the custom arguments provided, val is unused"""
+    return args["a"]
