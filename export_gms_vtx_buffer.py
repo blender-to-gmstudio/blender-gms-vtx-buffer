@@ -22,7 +22,7 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
     appropriate bytearray in ba using the description data structure provided"""
     desc, vertex_format_bytesize = desc
     
-    def fetch_attribs(desc,node,ba,byte_pos,frame):
+    def fetch_attribs(desc,node,ba,byte_pos,frame,ctx=None):
         """"Fetch the attribute values from the given node and place in ba at byte_pos"""
         id = node.bl_rna.identifier
         if id in desc:
@@ -31,7 +31,10 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
                     ind = byte_pos+offset
                     val = getattr(node,prop)
                     if func != None:
-                        val = func(val) if args == "" else func(val,json.loads(args))
+                        if args == "":
+                            val = func(val,ctx=ctx)
+                        else:
+                            val = func(val,ctx=ctx,args=json.loads(args))
                     val_bin = pack(fmt,val) if len(fmt) == 1 else pack(fmt,*val[:len(fmt)])
                     ba[frame-index][ind:ind+attr_blen] = val_bin
     
@@ -40,18 +43,24 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
         # axis conversion probably needs to go here, too...
         m.transform(obj.matrix_world)
     
+    # Setup context dict
+    ctx = {}
+    ctx['scene'] = scene
+    ctx['object'] = obj
+    
     ba_pos = 0
     for poly in m.polygons:
+        ctx['polygon'] = poly
         iter = reversed(poly.loop_indices) if reverse_loop else poly.loop_indices
         for li in iter:
-            fetch_attribs(desc,scene,ba,ba_pos,frame)
-            fetch_attribs(desc,obj,ba,ba_pos,frame)
+            fetch_attribs(desc,scene,ba,ba_pos,frame,ctx)
+            fetch_attribs(desc,obj,ba,ba_pos,frame,ctx)
             
-            fetch_attribs(desc,poly,ba,ba_pos,frame)
+            fetch_attribs(desc,poly,ba,ba_pos,frame,ctx)
             
             if (len(m.materials) > 0):
                 mat = m.materials[poly.material_index]
-                fetch_attribs(desc,mat,ba,ba_pos,frame)
+                fetch_attribs(desc,mat,ba,ba_pos,frame,ctx)
                 
                 """
                 if mat.use_nodes:
@@ -69,20 +78,21 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
                 """
             
             loop = m.loops[li]
-            fetch_attribs(desc,loop,ba,ba_pos,frame)
+            ctx['loop'] = loop
+            fetch_attribs(desc,loop,ba,ba_pos,frame,ctx)
             
             if (len(m.uv_layers) > 0):
                 uvs = m.uv_layers.active.data
                 uv = uvs[loop.index]                                # Use active uv layer
-                fetch_attribs(desc,uv,ba,ba_pos,frame)
+                fetch_attribs(desc,uv,ba,ba_pos,frame,ctx)
             
             vtx_colors = m.vertex_colors.active
             if vtx_colors:
                 vtx_col = vtx_colors.data[li]                       # Vertex colors
-                fetch_attribs(desc,vtx_col,ba,ba_pos,frame)
+                fetch_attribs(desc,vtx_col,ba,ba_pos,frame,ctx)
             
             vertex = m.vertices[loop.vertex_index]
-            fetch_attribs(desc,vertex,ba,ba_pos,frame)
+            fetch_attribs(desc,vertex,ba,ba_pos,frame,ctx)
             
             # We wrote a full vertex, so we can now increment the bytearray position by the vertex format size
             ba_pos += vertex_format_bytesize
