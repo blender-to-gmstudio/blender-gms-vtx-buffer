@@ -221,16 +221,13 @@ def export(self, context):
         
         # Final step: write all bytearrays to one or more file(s)
         # in one or more directories
-        f = open(root + ".vbx","wb")
-        
-        offset = {}
-        for obj in mesh_selection:
-            ba = ba_per_object[obj]
-            offset[obj] = f.tell()
-            for b in ba:
-                f.write(b)
-        
-        f.close()
+        with open(root + ".vbx",self.file_mode) as f:
+            offset = {}
+            for obj in mesh_selection:
+                ba = ba_per_object[obj]
+                offset[obj] = f.tell()
+                for b in ba:
+                    f.write(b)
     
     # Create JSON description file
     if self.export_json_data:

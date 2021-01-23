@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GameMaker:Studio Vertex Buffer",
     "description": "Exporter for GameMaker:Studio with customizable vertex format",
     "author": "Bart Teunis",
-    "version": (1, 0, 8),
+    "version": (1, 0, 9),
     "blender": (2, 82, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
@@ -158,6 +158,14 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         maxlen=255,
     )
     
+    file_mode: EnumProperty(
+        name="File Mode",
+        description="How to handle writing to files",
+        items=(('wb',"Overwrite", "Overwrite existing data"),
+               ('ab',"Append", "Append to existing"),
+        )
+    )
+    
     selection_only : BoolProperty(
         name="Selection Only",
         default=True,
@@ -255,7 +263,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         
         box.prop(self,property='selection_only')
         box.prop(self,property='frame_option')
-        #box.prop(self,property='batch_mode')
+        box.prop(self,property='file_mode')
         
         box = layout.box()
         
