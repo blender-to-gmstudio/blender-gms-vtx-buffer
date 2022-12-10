@@ -1,20 +1,25 @@
-# Blender to GameMaker:Studio Exporter
-This exporter supports multiple materials and is meant for all kinds of models.
+# Blender to GameMaker Vertex Buffer Exporter
+
+This exporter can be used to export all kinds of vertex formats.
+
 ## Description / Planned features
+
 * Generates one or more files with vertex buffer contents
 * Optionally performs (destructive) preparation steps => As few as possible
 * Generates an accompanying json file that describes all exported content
-* Features: 
+* Features (and ideas): 
   * Customizable vertex format (Done)
   * Static scenery (Done)
   * Dynamic scenery (mesh data + offset per mesh/object in json file) (Done)
   * Morphs & per-frame stuff, including interpolation (Done)
-  * Skeletons (i.e. armatures) => WIP
-  * A clean way to invert axes for both objects and mesh data => Have a look into orientation_helper
+  * A clean way to invert axes for both objects and mesh data => orientation_helper
   * Shape keys
+  * Material/Shader properties
   * line lists for particles, etc. ??
+  * Alternative ways to traverse the Blender RNA data
 
 ## Installing the plugin in Blender
+
 * In Blender, go to `Edit` > `Preferences`
 * Go to tab `Add-ons` and select `Install from File...`
 * Select the zip file `io_export_gms_vertex_buffer.zip` and confirm
@@ -23,6 +28,7 @@ This exporter supports multiple materials and is meant for all kinds of models.
 * The plugin is now ready to be used
 
 ### Installing presets
+
 Preset files are Python files (.py) that contain an operator preset's code.
 These files need to placed in the right directory for the operator to detect them.
 To install a new preset: 
@@ -32,10 +38,12 @@ To install a new preset:
 
 ## Usage
 ### In Blender
+
 * Select one or more objects that you want to export
 * Export using an existing export preset or create your own configuration
 
-### In GameMaker:Studio
+### In GameMaker
+
 * Load the file in a buffer
 * Define the vertex format, either in the code editor or load it from the .json file
 * Create a vertex buffer from the buffer using the created vertex format
@@ -50,7 +58,9 @@ The add-on does not currently come with any code for GameMaker.
 Many examples will be added to and explained in the wiki.
 
 ### Advanced
+
 More info and examples can be found in the wiki: https://github.com/blender-to-gmstudio/blender-gms-vtx-buffer/wiki
 
 ## Creating vertex formats
-TODO
+
+See the wiki on [defining vertex formats](https://github.com/blender-to-gmstudio/blender-gms-vtx-buffer/wiki/Exporting-Models#defining-vertex-formats).
