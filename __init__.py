@@ -147,7 +147,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     """Export (a selection of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
     bl_idname = "export_scene.gms_vtx_buffer"
-    bl_label = "Export GM:Studio Vertex Buffer"
+    bl_label = "Export GameMaker Vertex Buffer"
     bl_options = {'PRESET'}   # Allow presets of exporter configurations
     
     filename_ext = ""
