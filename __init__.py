@@ -242,9 +242,14 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         description="Export texture images to same directory as result file",
     )
     
+    custom_extension: StringProperty(
+        name="Ext",
+        description="Custom file extension to use, leave blank for default (.vbx)",
+        default="",
+    )
+    
     def invoke(self, context, event):
-        #print("operator invoke")
-        
+        # Lookup operator instance from global scope
         global gms_vbx_operator_instance
         gms_vbx_operator_instance = self
         
@@ -311,9 +316,9 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         box.label(text="Extras:",icon='PLUS')
         
         box.prop(self,property='export_images')
+        box.prop(self,property='custom_extension')
         
     def cancel(self, context):
-        #print("operator cancel")
         global gms_vbx_operator_instance
         gms_vbx_operator_instance = None
         
