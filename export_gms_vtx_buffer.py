@@ -102,29 +102,31 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
     obj.to_mesh_clear()
 
 
-def construct_ds(obj,attr):
-    """Constructs the data structure required to move through the attributes of a given object"""
+def construct_ds(obj, attr):
+    """ Constructs the data structure required to move through the attributes of a given object
+    
+    """
     from struct import calcsize
     
-    desc, offset = {}, 0
+    description, offset = {}, 0
     for a in attr:
         ident, atn, format, fo, func, args = a
         
-        if ident not in desc:
-            desc[ident] = {}
-        dct_obj = desc[ident]
+        if ident not in description:
+            description[ident] = {}
+        dct_obj = description[ident]
         
         if atn not in dct_obj:
             dct_obj[atn] = []
         lst_attr = dct_obj[atn]
         
-        prop_rna = getattr(bpy.types,ident).bl_rna.properties[atn]
+        prop_rna = getattr(bpy.types, ident).bl_rna.properties[atn]
         attrib_bytesize = calcsize(format)
         
-        lst_attr.append((offset,attrib_bytesize,format,fo,func, args))
+        lst_attr.append((offset, attrib_bytesize, format, fo, func, args))
         offset += attrib_bytesize
         
-    return (desc, offset)
+    return (description, offset)
 
 
 def construct_ba(obj,desc,frame_count):
@@ -209,7 +211,7 @@ def export(self, context):
             attrib.datapath[1].node,
             attrib.fmt,
             attrib.int,
-            None if attrib.func == "none" else getattr(conversions,attrib.func),
+            None if attrib.func == "none" else getattr(conversions, attrib.func),
             attrib.args,
         ) for attrib in self.vertex_format]
         
