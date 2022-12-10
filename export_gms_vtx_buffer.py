@@ -58,7 +58,7 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
             
             fetch_attribs(desc,poly,ba,ba_pos,frame,ctx)
             
-            if (len(m.materials) > 0):
+            if m.materials:
                 mat = m.materials[poly.material_index]
                 fetch_attribs(desc,mat,ba,ba_pos,frame,ctx)
                 
@@ -81,7 +81,7 @@ def write_object_ba(scene,obj,desc,ba,frame,reverse_loop,apply_transforms):
             ctx['loop'] = loop
             fetch_attribs(desc,loop,ba,ba_pos,frame,ctx)
             
-            if (len(m.uv_layers) > 0):
+            if m.uv_layers:
                 uvs = m.uv_layers.active.data
                 uv = uvs[loop.index]                                # Use active uv layer
                 fetch_attribs(desc,uv,ba,ba_pos,frame,ctx)
@@ -287,7 +287,7 @@ def export(self, context):
             
             if len(ntree.nodes) > 1:    # Quite a couple of happy assumptions we make here...
                 tex_node = [n for n in ntree.nodes if n.type == 'TEX_IMAGE']
-                if len(tex_node) > 0:
+                if tex_node:
                     tex_node = tex_node[0]
                     image = tex_node.image
                     if image:
