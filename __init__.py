@@ -17,7 +17,9 @@ if "bpy" in locals():
         importlib.reload(conversions)
 
 import bpy
+import sys
 from . import conversions
+from . import panels
 from bpy.props import (
     StringProperty,
     BoolProperty,
@@ -143,9 +145,14 @@ class VertexAttributeType(bpy.types.PropertyGroup):
     func : bpy.props.EnumProperty(name="Func", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
     args : bpy.props.StringProperty(name="Args", description="A string representation in JSON of a dictionary with custom arguments to be passed to the function", default="")
 
-@orientation_helper(axis_forward='-Z', axis_up='Y')
+# @orientation_helper(axis_forward='-Z', axis_up='Y')
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
-    """Export (a selection of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
+    """
+    
+    Export (a selection of) the current scene to a vertex buffer, including textures and a description file in JSON format
+    
+    """
+    
     bl_idname = "export_scene.gms_vtx_buffer"
     bl_label = "Export GameMaker Vertex Buffer"
     bl_options = {'PRESET'}   # Allow presets of exporter configurations
@@ -260,63 +267,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         return {'RUNNING_MODAL'}
     
     def draw(self, context):
-        layout = self.layout
-        
-        box = layout.box()
-        
-        box.label(text="General:",icon='SETTINGS')
-        
-        box.prop(self,property='selection_only')
-        box.prop(self,property='frame_option')
-        box.prop(self,property='file_mode')
-        
-        box = layout.box()
-        
-        box.label(text="Mesh Data:",icon='MESH_DATA')
-        box.prop(self,property="export_mesh_data")
-        
-        if self.export_mesh_data == True:
-            box.label(text="Vertex Format:")
-            
-            box.operator("export_scene.add_attribute_operator",text="Add")
-            
-            for index, item in enumerate(self.vertex_format):
-                #print(item)
-                row = box.row()
-                for node in item.datapath:
-                    row.prop(node,property='node')
-                row.prop(item,property='fmt')
-                row.prop(item,property='func')
-                row.prop(item,property='args')
-                row.prop(item,property='int')
-                opt_remove = row.operator("export_scene.remove_attribute_operator",text="Remove")
-                opt_remove.id = index
-        
-        box = layout.box()
-        
-        box.label(text="Object Data:",icon='OBJECT_DATA')
-        box.prop(self,property="export_json_data")
-        
-        if self.export_json_data == True:
-            box.prop(self,property="object_types_to_export")
-        
-        box = layout.box()
-        
-        box.label(text="Transforms:",icon='CONSTRAINT')
-        
-        #row = box.row()
-        #row.prop(self,property='axis_forward')
-        #row.prop(self,property='axis_up')
-        
-        box.prop(self,property="apply_transforms")
-        box.prop(self,property='reverse_loop')
-        
-        box = layout.box()
-        
-        box.label(text="Extras:",icon='PLUS')
-        
-        box.prop(self,property='export_images')
-        box.prop(self,property='custom_extension')
+        pass
         
     def cancel(self, context):
         global gms_vbx_operator_instance
@@ -369,18 +320,20 @@ def menu_func_export(self, context):
     self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GameMaker Vertex Buffer (*.vbx + *.json)")
 
 
-classes = (
+classes = [
     DataPathType,
     VertexAttributeType,
     AddVertexAttributeOperator,
     RemoveVertexAttributeOperator,
-    ExportGMSVertexBuffer,
-)
+]
+
+panel_classes = [getattr(panels, c) for c in dir(panels) if c.startswith("VBX_PT_")]
+classes.extend(panel_classes)
+
+classes.append(ExportGMSVertexBuffer)
 
 
 def register():
-    #print("reg")
-    
     for cls in classes:
         bpy.utils.register_class(cls)
     
@@ -388,8 +341,6 @@ def register():
 
 
 def unregister():
-    #print("unreg")
-    
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     
