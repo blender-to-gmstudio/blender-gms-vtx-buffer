@@ -23,7 +23,7 @@ This exporter can be used to export all kinds of vertex formats.
 * In Blender, go to `Edit` > `Preferences`
 * Go to tab `Add-ons` and select `Install from File...`
 * Select the zip file `io_export_gms_vertex_buffer.zip` and confirm
-* Tick the checkbox next to `Import-Export: Export GameMaker:Studio Vertex Buffer`
+* Tick the checkbox next to `Import-Export: Export GameMaker Vertex Buffer`
 * Click `Save User Settings`
 * The plugin is now ready to be used
 
