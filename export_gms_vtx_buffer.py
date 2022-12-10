@@ -181,6 +181,8 @@ def export(self, context):
     root, ext = splitext(self.filepath)
     base, fname = split(self.filepath)
     fn = splitext(fname)[0]
+    print("Root")
+    print(root)
     scene = context.scene
     frame_count = scene.frame_end-scene.frame_start+1 if self.frame_option == 'all' else 1
     object_selection = context.selected_objects if self.selection_only else context.scene.objects

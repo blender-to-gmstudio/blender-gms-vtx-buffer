@@ -1,6 +1,6 @@
 bl_info = {
-    "name": "Export GameMaker:Studio Vertex Buffer",
-    "description": "Exporter for GameMaker:Studio with customizable vertex format",
+    "name": "Export GameMaker Vertex Buffer",
+    "description": "Exporter for GameMaker with highly customizable vertex format",
     "author": "Bart Teunis",
     "version": (1, 0, 9),
     "blender": (2, 82, 0),
@@ -150,10 +150,10 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     bl_label = "Export GM:Studio Vertex Buffer"
     bl_options = {'PRESET'}   # Allow presets of exporter configurations
     
-    filename_ext = ".json"
+    filename_ext = ""
     
     filter_glob : StringProperty(
-        default="*.json",
+        default="*.vbx;*.json",
         options={'HIDDEN'},
         maxlen=255,
     )
@@ -204,14 +204,14 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     
     export_mesh_data : BoolProperty(
         name="Export Mesh Data",
-        default=False,
+        default=True,
         description="Whether to export mesh data to a separate, binary file (.vbx)",
     )
     
     export_json_data : BoolProperty(
         name="Export Object Data",
-        default = True,
-        description="Whether to export blender data (bpy.data) in JSON format",
+        default = False,
+        description="Whether to export blender data (bpy.data) in JSON format (WARNING: very limited)",
     )
     
     object_types_to_export : EnumProperty(
@@ -238,7 +238,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     
     export_images : BoolProperty(
         name="Export Images",
-        default=True,
+        default=False,
         description="Export texture images to same directory as result file",
     )
     
@@ -361,7 +361,7 @@ class RemoveVertexAttributeOperator(bpy.types.Operator):
 
 
 def menu_func_export(self, context):
-    self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GM:Studio Vertex Buffer (*.json + *.vbx)")
+    self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GameMaker Vertex Buffer (*.vbx + *.json)")
 
 
 classes = (
