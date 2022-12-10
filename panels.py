@@ -62,6 +62,7 @@ class VBX_PT_export_attributes(bpy.types.Panel):
         operator = sfile.active_operator
 
         self.layout.prop(operator, "export_mesh_data", text="")
+        self.layout.label(text="", icon='MESH_DATA')
 
     def draw(self, context):
         layout = self.layout
@@ -155,6 +156,10 @@ class VBX_PT_general(bpy.types.Panel):
         box.prop(operator, property='selection_only')
         box.prop(operator, property='frame_option')
         box.prop(operator, property='file_mode')
+    
+    def draw_header(self, context):
+        layout = self.layout
+        layout.label(text="", icon='SETTINGS')
 
 
 class VBX_PT_extra(bpy.types.Panel):
@@ -184,6 +189,10 @@ class VBX_PT_extra(bpy.types.Panel):
 
         box.prop(operator, property='export_images')
         box.prop(operator, property='custom_extension')
+    
+    def draw_header(self, context):
+        layout = self.layout
+        layout.label(text="", icon='PLUS')
 
 
 class VBX_PT_transforms(bpy.types.Panel):
@@ -217,6 +226,10 @@ class VBX_PT_transforms(bpy.types.Panel):
 
         box.prop(operator, property="apply_transforms")
         box.prop(operator, property="reverse_loop")
+    
+    def draw_header(self, context):
+        layout = self.layout
+        layout.label(text="", icon='CONSTRAINT')
 
 
 class VBX_PT_export_object_data(bpy.types.Panel):
@@ -234,12 +247,6 @@ class VBX_PT_export_object_data(bpy.types.Panel):
 
         return operator.bl_idname == "EXPORT_SCENE_OT_gms_vtx_buffer"
 
-    def draw_header(self, context):
-        sfile = context.space_data
-        operator = sfile.active_operator
-
-        self.layout.prop(operator, "export_json_data", text="")
-
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
@@ -251,3 +258,11 @@ class VBX_PT_export_object_data(bpy.types.Panel):
         box = layout.box()
 
         box.prop(operator, property="object_types_to_export")
+    
+    def draw_header(self, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+        layout = self.layout
+
+        layout.prop(operator, "export_json_data", text="")
+        layout.label(text="", icon='OBJECT_DATA')
