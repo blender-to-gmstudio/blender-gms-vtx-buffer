@@ -204,8 +204,14 @@ def export(self, context):
     if self.export_mesh_data:
         from . import conversions
         
-        attribs = [(i.datapath[0].node,i.datapath[1].node,i.fmt,i.int,None if i.func == "none" else getattr(conversions,i.func),i.args) for i in self.vertex_format]
-        #print(attribs)
+        attribs = [(
+            attrib.datapath[0].node,
+            attrib.datapath[1].node,
+            attrib.fmt,
+            attrib.int,
+            None if attrib.func == "none" else getattr(conversions,attrib.func),
+            attrib.args,
+        ) for attrib in self.vertex_format]
         
         # << Prepare a structure to map vertex attributes to the actual contents >>
         ba_per_object = {}
@@ -223,7 +229,15 @@ def export(self, context):
             
             # Now add frame vertex data for the current object
             for obj in mesh_selection:
-                write_object_ba(scene,obj,desc_per_object[obj],ba_per_object[obj],i,self.reverse_loop,self.apply_transforms)
+                write_object_ba(
+                    scene,
+                    obj,
+                    desc_per_object[obj],
+                    ba_per_object[obj],
+                    i,
+                    self.reverse_loop,
+                    self.apply_transforms,
+                )
         
         # Final step: write all bytearrays to one or more file(s)
         # in one or more directories
@@ -247,7 +261,6 @@ def export(self, context):
         
         # Export bpy.context
         ctx["selected_objects"] = [object_to_json(obj) for obj in object_selection]
-        #ctx["scene"] = {"view_layers":{"layers":[{layer.name:[i for i in layer.layer_collection]} for layer in context.scene.view_layers]}}
         
         # Export bpy.data
         data_to_export = self.object_types_to_export
@@ -269,9 +282,8 @@ def export(self, context):
         }
         
         import json
-        f_desc = open(root + ".json","w")
-        json.dump(json_data,f_desc)
-        f_desc.close()
+        with open(root + ".json","w") as f_desc:
+            json.dump(json_data,f_desc)
     
     # Save images (Cycles and Eevee materials)
     if self.export_images:
