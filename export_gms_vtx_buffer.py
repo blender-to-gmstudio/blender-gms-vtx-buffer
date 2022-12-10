@@ -190,6 +190,9 @@ def export(self, context):
     mesh_selection = [obj for obj in object_selection if obj.type in meshlike_types]    # TODO Does this break morphs?
     for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
     
+    # Support alternative extension for model files
+    ext = self.custom_extension if self.custom_extension else ".vbx"
+    
     # FIX for issue #21
     no_verts_per_object = {}
     offset = {}
@@ -224,7 +227,7 @@ def export(self, context):
         
         # Final step: write all bytearrays to one or more file(s)
         # in one or more directories
-        with open(root + ".vbx",self.file_mode) as f:
+        with open(root + ext,self.file_mode) as f:
             offset = {}
             for obj in mesh_selection:
                 ba = ba_per_object[obj]
@@ -255,7 +258,7 @@ def export(self, context):
         # Export additional info that might be useful
         json_data["blmod"] = {
             "mesh_data":{
-                "location":fn + ".vbx",
+                "location":fn + ext,
                 "format":[{"type":x.datapath[0].node,"attr":x.datapath[1].node,"fmt":x.fmt} for x in self.vertex_format],
                 "ranges":{obj.name:{"no_verts":no_verts_per_object[obj],"offset":offset[obj]} for obj in mesh_selection},
             },

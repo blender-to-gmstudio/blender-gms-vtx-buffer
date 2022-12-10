@@ -251,7 +251,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     
     custom_extension: StringProperty(
         name="Ext",
-        description="Custom file extension to use, leave blank for default (.vbx)",
+        description="Custom file extension to use for model files, including the dot (leave blank for default (.vbx))",
         default="",
     )
     
