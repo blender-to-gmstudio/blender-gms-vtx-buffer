@@ -18,6 +18,8 @@ if "bpy" in locals():
 
 import bpy
 import sys
+import os
+import shutil
 from . import conversions
 from . import panels
 from bpy.props import (
@@ -26,6 +28,7 @@ from bpy.props import (
     EnumProperty,
     CollectionProperty,
     )
+from bpy.types import AddonPreferences
 from bpy_extras.io_utils import (
     ExportHelper,
     orientation_helper,
@@ -34,6 +37,18 @@ from inspect import (
     getmembers,
     isfunction,
     )
+
+
+class VBXAddonPreferences(AddonPreferences):
+    # this must match the add-on name, use '__package__'
+    # when defining this in a submodule of a python package.
+    bl_idname = __name__
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text = "Install default export presets that come with the add-on.")
+        layout.label(text = "WARNING: existing presets with the same name will be overwritten!")
+        layout.operator("export_scene.install_vbx_presets", text="Install Presets")
 
 # The current operator instance
 # Equals None when exporting via console (direct function call)
@@ -316,6 +331,21 @@ class RemoveVertexAttributeOperator(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class InstallVBXPresetsOperator(bpy.types.Operator):
+    """Install presets in presets directory"""
+    bl_idname = "export_scene.install_vbx_presets"
+    bl_label = "Install Export Presets"
+    
+    def execute(self, context):
+        addon_dir = os.path.dirname(__file__)
+        presets_dir = addon_dir + os.sep + "presets"
+        dir2 = os.path.abspath(addon_dir + os.sep + ".." + os.sep + "..")
+        new_presets_dir = dir2 + os.sep + "presets" + os.sep + "operator" + os.sep + ExportGMSVertexBuffer.bl_idname
+        
+        shutil.copytree(presets_dir, new_presets_dir, dirs_exist_ok=True)
+        
+        return {'FINISHED'}
+
 def menu_func_export(self, context):
     self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GameMaker Vertex Buffer (*.vbx + *.json)")
 
@@ -325,13 +355,14 @@ classes = [
     VertexAttributeType,
     AddVertexAttributeOperator,
     RemoveVertexAttributeOperator,
+    InstallVBXPresetsOperator,
 ]
 
 panel_classes = [getattr(panels, c) for c in dir(panels) if c.startswith("VBX_PT_")]
 classes.extend(panel_classes)
 
+classes.append(VBXAddonPreferences)
 classes.append(ExportGMSVertexBuffer)
-
 
 def register():
     for cls in classes:
