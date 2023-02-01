@@ -43,7 +43,7 @@ class VBXAddonPreferences(AddonPreferences):
     # this must match the add-on name, use '__package__'
     # when defining this in a submodule of a python package.
     bl_idname = __name__
-    
+
     def draw(self, context):
         layout = self.layout
         layout.label(text = "Install default export presets that come with the add-on.")
@@ -112,7 +112,7 @@ class DataPathType(bpy.types.PropertyGroup):
         else:
             # Return a list of all possible values (direct export via console)
             return items_glob
-    
+
     def set_format_from_type(self, context):
         global gms_vbx_operator_instance
         if gms_vbx_operator_instance:
@@ -128,7 +128,7 @@ class DataPathType(bpy.types.PropertyGroup):
                     break
                 except ValueError:
                     continue
-            
+
             #print(line, index)
             attribute = gms_vbx_operator_instance.vertex_format[line]
             if len(attribute.datapath) > 1:
@@ -152,7 +152,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         item_list.extend([(o[0],o[1].__name__,o[1].__doc__) for o in getmembers(conversions,isfunction)])
         #print(item_list)
         return item_list
-    
+
     # Actual properties
     datapath : bpy.props.CollectionProperty(name="Path", type=DataPathType)
     fmt : bpy.props.StringProperty(name="Fmt", description="The format string to be used for the binary data", default="fff")
@@ -163,23 +163,23 @@ class VertexAttributeType(bpy.types.PropertyGroup):
 # @orientation_helper(axis_forward='-Z', axis_up='Y')
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     """
-    
+
     Export (a selection of) the current scene to a vertex buffer, including textures and a description file in JSON format
-    
+
     """
-    
+
     bl_idname = "export_scene.gms_vtx_buffer"
     bl_label = "Export GameMaker Vertex Buffer"
     bl_options = {'PRESET'}   # Allow presets of exporter configurations
-    
+
     filename_ext = ""
-    
+
     filter_glob : StringProperty(
         default="*.vbx;*.json",
         options={'HIDDEN'},
         maxlen=255,
     )
-    
+
     file_mode: EnumProperty(
         name="File Mode",
         description="How to handle writing to files",
@@ -187,24 +187,24 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
                ('ab',"Append", "Append to existing"),
         )
     )
-    
+
     selection_only : BoolProperty(
         name="Selection Only",
         default=True,
         description="Only export objects that are currently selected",
     )
-    
+
     vertex_format : CollectionProperty(
         name="Vertex Format",
         type=VertexAttributeType,
     )
-    
+
     reverse_loop : BoolProperty(
         name="Reverse Loop",
         default=False,
         description="Reverse looping through triangle indices",
     )
-    
+
     frame_option : EnumProperty(
         name="Frame",
         description="Which frames to export",
@@ -212,7 +212,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
                ('all',"All","Export all frames in range"),
         )
     )
-    
+
     batch_mode : EnumProperty(
         name="Batch Mode",
         description="How to split individual object data over files",
@@ -223,19 +223,19 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
                ('fraobj',"Per Frame Then Object", "Create a directory for each frame with a file for each object"),
         )
     )
-    
+
     export_mesh_data : BoolProperty(
         name="Export Mesh Data",
         default=True,
         description="Whether to export mesh data to a separate, binary file (.vbx)",
     )
-    
+
     export_json_data : BoolProperty(
         name="Export Object Data",
         default = False,
         description="Whether to export blender data (bpy.data) in JSON format (WARNING: very limited)",
     )
-    
+
     object_types_to_export : EnumProperty(
         name="Object Types",
         description="Which types of object data to export",
@@ -251,54 +251,54 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
                ('collections',"Collections","Export collections"),
         )
     )
-    
+
     apply_transforms : BoolProperty(
         name="Apply Transforms",
         default=True,
         description="Whether to apply object transforms to mesh data",
     )
-    
+
     export_images : BoolProperty(
         name="Export Images",
         default=False,
         description="Export texture images to same directory as result file",
     )
-    
+
     custom_extension: StringProperty(
         name="Ext",
         description="Custom file extension to use for model files, including the dot (leave blank for default (.vbx))",
         default="",
     )
-    
+
     def invoke(self, context, event):
         # Lookup operator instance from global scope
         global gms_vbx_operator_instance
         gms_vbx_operator_instance = self
-        
+
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
-        
+
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
-    
+
     def draw(self, context):
         pass
-        
+
     def cancel(self, context):
         global gms_vbx_operator_instance
         gms_vbx_operator_instance = None
-        
+
         # Cleanup: remove dynamic property from class
         del bpy.types.Object.batch_index
 
     def execute(self, context):
         # Putting this here seems to fix #22
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")
-        
+
         # This one seems to be required, too?
         global gms_vbx_operator_instance
         #gms_vbx_operator_instance = self
-        
+
         from . import export_gms_vtx_buffer
         result = export_gms_vtx_buffer.export(self, context)
         gms_vbx_operator_instance = None
@@ -322,9 +322,9 @@ class RemoveVertexAttributeOperator(bpy.types.Operator):
     """Remove the selected attribute from the vertex format"""
     bl_idname = "export_scene.remove_attribute_operator"
     bl_label = "Remove Vertex Attribute"
-    
+
     id: bpy.props.IntProperty()
-    
+
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
         context.active_operator.vertex_format.remove(self.id)
@@ -335,15 +335,18 @@ class InstallVBXPresetsOperator(bpy.types.Operator):
     """Install presets in presets directory"""
     bl_idname = "export_scene.install_vbx_presets"
     bl_label = "Install Export Presets"
-    
+
     def execute(self, context):
         addon_dir = os.path.dirname(__file__)
         presets_dir = addon_dir + os.sep + "presets"
         dir2 = os.path.abspath(addon_dir + os.sep + ".." + os.sep + "..")
         new_presets_dir = dir2 + os.sep + "presets" + os.sep + "operator" + os.sep + ExportGMSVertexBuffer.bl_idname
-        
-        shutil.copytree(presets_dir, new_presets_dir, dirs_exist_ok=True)
-        
+
+        dest = shutil.copytree(presets_dir, new_presets_dir, dirs_exist_ok=True)
+
+        self.report({'INFO'}, ("Export GameMaker Vertex Buffer\n"
+                               "Export presets copied to: {0}").format(dest))
+
         return {'FINISHED'}
 
 def menu_func_export(self, context):
@@ -367,14 +370,14 @@ classes.append(ExportGMSVertexBuffer)
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-    
+
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
 
 
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    
+
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 
 
