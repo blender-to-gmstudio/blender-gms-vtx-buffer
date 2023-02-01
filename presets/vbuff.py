@@ -1,3 +1,9 @@
+# Export to the default vertex format as defined
+# in the DDD Editor (Penguin) software found at:
+# 
+# https://dragonite.itch.io/penguin
+# 
+
 import bpy
 op = bpy.context.active_operator
 
