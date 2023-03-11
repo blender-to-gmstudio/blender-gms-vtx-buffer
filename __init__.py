@@ -54,6 +54,9 @@ class VBXAddonPreferences(AddonPreferences):
 # Equals None when exporting via console (direct function call)
 gms_vbx_operator_instance = None
 
+# Whether the vertex format definition was initialized a first time or not
+initialized = False
+
 # List of currently supported sources
 supported_sources = {
     'MeshVertex',
@@ -270,6 +273,51 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         default="",
     )
 
+    def init_passthrough(self):
+        """Initialize the export properties for a passthrough export"""
+        op = self
+
+        # op.vertex_format.clear()
+        item_sub_1 = op.vertex_format.add()
+        item_sub_1.name = ''
+        item_sub_1.datapath.clear()
+        item_sub_2 = item_sub_1.datapath.add()
+        item_sub_2.name = ''
+        item_sub_2.node = 'MeshVertex'
+        item_sub_2 = item_sub_1.datapath.add()
+        item_sub_2.name = ''
+        item_sub_2.node = 'co'
+        item_sub_1.fmt = 'fff'
+        item_sub_1.int = 0
+        item_sub_1.func = 'invert_y'
+        item_sub_1.args = ''
+        item_sub_1 = op.vertex_format.add()
+        item_sub_1.name = ''
+        item_sub_1.datapath.clear()
+        item_sub_2 = item_sub_1.datapath.add()
+        item_sub_2.name = ''
+        item_sub_2.node = 'MeshLoopColor'
+        item_sub_2 = item_sub_1.datapath.add()
+        item_sub_2.name = ''
+        item_sub_2.node = 'color'
+        item_sub_1.fmt = 'BBBB'
+        item_sub_1.int = 0
+        item_sub_1.func = 'vec_to_bytes'
+        item_sub_1.args = ''
+        item_sub_1 = op.vertex_format.add()
+        item_sub_1.name = ''
+        item_sub_1.datapath.clear()
+        item_sub_2 = item_sub_1.datapath.add()
+        item_sub_2.name = ''
+        item_sub_2.node = 'MeshUVLoop'
+        item_sub_2 = item_sub_1.datapath.add()
+        item_sub_2.name = ''
+        item_sub_2.node = 'uv'
+        item_sub_1.fmt = 'ff'
+        item_sub_1.int = 0
+        item_sub_1.func = 'invert_v'
+        item_sub_1.args = ''
+
     def invoke(self, context, event):
         # Lookup operator instance from global scope
         global gms_vbx_operator_instance
@@ -277,6 +325,25 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
 
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
+
+        """
+        # Get presets folder location
+        paths = bpy.utils.preset_paths("")
+        paths = [p for p in paths if p.startswith(os.environ["USERPROFILE"])]
+        if paths:
+            path_base = paths[0]
+        path_rel = os.sep.join(["operator", ExportGMSVertexBuffer.bl_idname])
+        path = path_base + path_rel
+        print("The path to this addon's presets is:", path)
+
+        # Danger zone here!
+        bpy.utils.execfile(os.sep.join([path, "passthrough.py"]))
+        """
+
+        # Do some custom initialization, not using any preset file.
+        global initialized
+        if not initialized:
+            ExportGMSVertexBuffer.init_passthrough(self)
 
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -302,7 +369,10 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         from . import export_gms_vtx_buffer
         result = export_gms_vtx_buffer.export(self, context)
         gms_vbx_operator_instance = None
+        global initialized
+        initialized = True
         return result
+
 
 # Operators to get the vertex format customization add/remove to work
 # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel
@@ -314,7 +384,8 @@ class AddVertexAttributeOperator(bpy.types.Operator):
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
         item = context.active_operator.vertex_format.add()
-        item.datapath.add()
+        node = item.datapath.add()
+        node.node = 'MeshVertex'
         item.datapath.add()
         return {'FINISHED'}
 
@@ -332,7 +403,7 @@ class RemoveVertexAttributeOperator(bpy.types.Operator):
 
 
 class InstallVBXPresetsOperator(bpy.types.Operator):
-    """Install presets in presets directory"""
+    """Install presets in (user) presets directory"""
     bl_idname = "export_scene.install_vbx_presets"
     bl_label = "Install Export Presets"
 
@@ -340,7 +411,7 @@ class InstallVBXPresetsOperator(bpy.types.Operator):
         addon_dir = os.path.dirname(__file__)
         presets_dir = addon_dir + os.sep + "presets"
         dir2 = os.path.abspath(addon_dir + os.sep + ".." + os.sep + "..")
-        new_presets_dir = dir2 + os.sep + "presets" + os.sep + "operator" + os.sep + ExportGMSVertexBuffer.bl_idname
+        new_presets_dir = os.sep.join(dir2, "presets", "operator", ExportGMSVertexBuffer.bl_idname)
 
         dest = shutil.copytree(presets_dir, new_presets_dir, dirs_exist_ok=True)
 
