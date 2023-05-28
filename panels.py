@@ -81,6 +81,7 @@ class VBX_PT_export_attributes(bpy.types.Panel):
                 row.prop(node, property='node')
             row.prop(item, property='fmt')
             row.prop(item, property='func')
+            row.prop(item, property='int')
             row.prop(item, property='args')
             opt_remove = row.operator("export_scene.remove_attribute_operator", text="Remove")
             opt_remove.id = index
