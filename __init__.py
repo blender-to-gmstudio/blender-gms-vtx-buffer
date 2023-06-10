@@ -267,10 +267,20 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         description="Export texture images to same directory as result file",
     )
 
+    def update_filter(self, context):
+        params = context.space_data.params
+        if not self.custom_extension:
+            ext = ".vbx"
+        else:
+            ext = self.custom_extension
+        params.filter_glob = "*" + ext + ";*.json"
+        bpy.ops.file.refresh()
+
     custom_extension: StringProperty(
         name="Ext",
         description="Custom file extension to use for model files, including the dot (leave blank for default (.vbx))",
         default="",
+        update=update_filter    # See Blender issue 104221
     )
 
     def init_passthrough(self):
