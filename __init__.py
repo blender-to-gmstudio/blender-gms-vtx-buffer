@@ -421,7 +421,7 @@ class InstallVBXPresetsOperator(bpy.types.Operator):
         addon_dir = os.path.dirname(__file__)
         presets_dir = addon_dir + os.sep + "presets"
         dir2 = os.path.abspath(addon_dir + os.sep + ".." + os.sep + "..")
-        new_presets_dir = os.sep.join(dir2, "presets", "operator", ExportGMSVertexBuffer.bl_idname)
+        new_presets_dir = os.sep.join([dir2, "presets", "operator", ExportGMSVertexBuffer.bl_idname])
 
         dest = shutil.copytree(presets_dir, new_presets_dir, dirs_exist_ok=True)
 
