@@ -5,7 +5,7 @@ This exporter can be used to export all kinds of vertex formats.
 ## Description / Planned features
 
 * Generates one or more files with vertex buffer contents
-* Optionally performs (destructive) preparation steps => As few as possible
+* Optionally performs (destructive) preparation steps
 * Generates an accompanying json file that describes all exported content
 * Features (and ideas): 
   * Customizable vertex format (Done)
@@ -22,7 +22,7 @@ This exporter can be used to export all kinds of vertex formats.
 
 * In Blender, go to `Edit` > `Preferences`
 * Go to tab `Add-ons` and select `Install from File...`
-* Select the zip file `io_export_gms_vertex_buffer.zip` and confirm
+* Select the zip file `blender-gms-vtx-buffer-v1.0.12.zip` and confirm (the filename will be different for another version of the exporter)
 * Tick the checkbox next to `Import-Export: Export GameMaker Vertex Buffer`
 * Click `Save User Settings`
 * The plugin is now ready to be used
