@@ -191,10 +191,11 @@ def export(self, context):
     scene = context.scene
 
     # Work out the frames to export
+    # frame_offset is used to index the correct bytearray! (index 0 for frame_start)
     if self.frame_option == 'all':
         # Full scene frame range, take the step value into account
         frame_range = range(scene.frame_start, scene.frame_end+1, scene.frame_step)
-        frame_offset = 0
+        frame_offset = scene.frame_start
     else:
         # Only the current frame
         frame_range = range(scene.frame_current, scene.frame_current+1)
