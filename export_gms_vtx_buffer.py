@@ -30,7 +30,7 @@ def write_object_ba(scene, obj, desc, ba, frame, reverse_loop, apply_transforms)
         id = node.bl_rna.identifier
         if id in desc:
             for prop, occurences in desc[id].items():                         # Property name and occurrences in bytedata
-                for offset, attr_blen, fmt, index, func, args in occurences:  # Each occurence's data (tuple assignment!)
+                for offset, attr_blen, fmt, index, func, args in occurences:  # Each occurrence's data (tuple assignment!)
                     ind = byte_pos+offset
                     val = getattr(node, prop)
                     if func != None:
@@ -130,13 +130,14 @@ def construct_ds(obj, attr):
     return (description, offset)
 
 
-def construct_ba(obj, desc, frame_count):
-    """Construct the required bytearrays to store vertex data for the given object for the given number of frames"""
+def construct_ba(obj, desc, frame_range):
+    """Construct the required bytearrays to store vertex data
+       for the given object for the given number of frames"""
     m = triangulated_mesh_from_object(obj)
     no_verts = len(m.polygons) * 3
-    obj.to_mesh_clear()                                   # Any easier way to get number of vertices??
+    obj.to_mesh_clear()         # TODO Any easier way to get number of vertices??
     desc, vertex_format_bytesize = desc
-    ba = [bytearray([0] * no_verts * vertex_format_bytesize) for i in range(frame_count)]
+    ba = [bytearray([0] * no_verts * vertex_format_bytesize) for f in frame_range]
     return ba, no_verts
 
 
@@ -178,7 +179,7 @@ def object_to_json(obj):
 
 def export(self, context):
     """Main entry point for export"""
-    
+
     # TODO Get rid of context in this function
 
     from os.path import split, splitext
@@ -188,9 +189,19 @@ def export(self, context):
     base, fname = split(self.filepath)
     fn = splitext(fname)[0]
     scene = context.scene
-    frame_count = scene.frame_end-scene.frame_start+1 if self.frame_option == 'all' else 1
+
+    # Work out the frames to export
+    if self.frame_option == 'all':
+        # Full scene frame range, take the step value into account
+        frame_range = range(scene.frame_start, scene.frame_end+1, scene.frame_step)
+        frame_offset = 0
+    else:
+        # Only the current frame
+        frame_range = range(scene.frame_current, scene.frame_current+1)
+        frame_offset = scene.frame_current  # Offset to subtract in the data buffer
+
+    # Which models to export
     object_selection = context.selected_objects if self.selection_only else context.scene.objects
-    # mesh_selection = [obj for obj in object_selection if obj.type == 'MESH']
     mesh_selection = [obj for obj in object_selection if obj.type in meshlike_types]    # TODO Does this break morphs?
     for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
 
@@ -209,8 +220,8 @@ def export(self, context):
         from . import conversions
 
         attribs = [(
-            attrib.datapath[0].node,
-            attrib.datapath[1].node,
+            attrib.datapath[0].node,    # Node on which to look up attribute
+            attrib.datapath[1].node,    # attribute to look up on the node
             attrib.fmt,
             attrib.int,
             None if attrib.func == "none" else getattr(conversions, attrib.func),
@@ -221,15 +232,17 @@ def export(self, context):
         ba_per_object = {}
         desc_per_object = {}
         for obj in mesh_selection:
-            desc_per_object[obj] = construct_ds(obj,attribs)
-            ba_per_object[obj], no_verts_per_object[obj] = construct_ba(obj,desc_per_object[obj], frame_count)
+            desc_per_object[obj] = construct_ds(obj, attribs)
+            ba_per_object[obj], no_verts_per_object[obj] = construct_ba(obj, desc_per_object[obj], frame_range)
 
         # << End of preparation of structure >>
 
         # Loop through scene frames
-        for i in range(frame_count):
+        frame_prev = scene.frame_current
+
+        for frame in frame_range:
             # First set the current frame
-            scene.frame_set(scene.frame_start+i)
+            scene.frame_set(frame)
 
             # Now add frame vertex data for the current object
             for obj in mesh_selection:
@@ -238,10 +251,13 @@ def export(self, context):
                     obj,
                     desc_per_object[obj],
                     ba_per_object[obj],
-                    i,
+                    frame - frame_offset,
                     self.reverse_loop,
                     self.apply_transforms,
                 )
+
+        # Nicely reset the previous frame
+        scene.frame_set(frame_prev)
 
         # Final step: write all bytearrays to one or more file(s)
         # in one or more directories
@@ -280,7 +296,7 @@ def export(self, context):
                 "ranges":{obj.name:{"no_verts":no_verts_per_object[obj],"offset":offset[obj]} for obj in mesh_selection},
             },
             "settings":{"apply_transforms":self.apply_transforms},
-            "no_frames":frame_count,
+            "no_frames":len(frame_range),
             "blender_version":bpy.app.version[:],
             #"version":bl_info["version"],
         }
