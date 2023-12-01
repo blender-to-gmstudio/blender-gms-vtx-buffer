@@ -51,6 +51,7 @@ def write_object_ba(scene, obj, desc, ba, frame, reverse_loop, apply_transforms)
     ctx['scene'] = scene
     ctx['object'] = obj
 
+    # Traverse the Blender data, starting at the polygons
     ba_pos = 0
     for poly in m.polygons:
         ctx['polygon'] = poly
@@ -177,7 +178,20 @@ def object_to_json(obj):
     return result
 
 
-def export(self, context):
+def export(context, filepath,
+        file_mode,
+        selection_only,
+        vertex_format,
+        reverse_loop,
+        frame_option,
+        batch_mode,
+        export_mesh_data,
+        export_json_data,
+        object_types_to_export,
+        apply_transforms,
+        export_images,
+        custom_extension
+        ):
     """Main entry point for export"""
 
     # TODO Get rid of context in this function
@@ -185,14 +199,14 @@ def export(self, context):
     from os.path import split, splitext
 
     # Prepare a bit
-    root, ext = splitext(self.filepath)
-    base, fname = split(self.filepath)
+    root, ext = splitext(filepath)
+    base, fname = split(filepath)
     fn = splitext(fname)[0]
     scene = context.scene
 
     # Work out the frames to export
     # frame_offset is used to index the correct bytearray! (index 0 for frame_start)
-    if self.frame_option == 'all':
+    if frame_option == 'all':
         # Full scene frame range, take the step value into account
         frame_range = range(scene.frame_start, scene.frame_end+1, scene.frame_step)
         frame_offset = scene.frame_start
@@ -202,12 +216,12 @@ def export(self, context):
         frame_offset = scene.frame_current  # Offset to subtract in the data buffer
 
     # Which models to export
-    object_selection = context.selected_objects if self.selection_only else context.scene.objects
+    object_selection = context.selected_objects if selection_only else context.scene.objects
     mesh_selection = [obj for obj in object_selection if obj.type in meshlike_types]    # TODO Does this break morphs?
     for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
 
     # Support alternative extension for model files
-    ext = self.custom_extension if self.custom_extension else ".vbx"
+    ext = custom_extension if custom_extension else ".vbx"
 
     # FIX for issue #21
     no_verts_per_object = {}
@@ -217,7 +231,7 @@ def export(self, context):
         offset[obj] = 0
 
     # Export mesh data to buffer
-    if self.export_mesh_data:
+    if export_mesh_data:
         from . import conversions
 
         attribs = [(
@@ -227,7 +241,7 @@ def export(self, context):
             attrib.int,
             None if attrib.func == "none" else getattr(conversions, attrib.func),
             attrib.args,
-        ) for attrib in self.vertex_format]
+        ) for attrib in vertex_format]
 
         # << Prepare a structure to map vertex attributes to the actual contents >>
         ba_per_object = {}
@@ -253,8 +267,8 @@ def export(self, context):
                     desc_per_object[obj],
                     ba_per_object[obj],
                     frame - frame_offset,
-                    self.reverse_loop,
-                    self.apply_transforms,
+                    reverse_loop,
+                    apply_transforms,
                 )
 
         # Nicely reset the previous frame
@@ -262,7 +276,7 @@ def export(self, context):
 
         # Final step: write all bytearrays to one or more file(s)
         # in one or more directories
-        with open(root + ext, self.file_mode) as f:
+        with open(root + ext, file_mode) as f:
             offset = {}
             for obj in mesh_selection:
                 ba = ba_per_object[obj]
@@ -271,7 +285,7 @@ def export(self, context):
                     f.write(b)
 
     # Create JSON description file
-    if self.export_json_data:
+    if export_json_data:
         ctx, data = {}, {}
         json_data = {
             "bpy":{
@@ -284,7 +298,7 @@ def export(self, context):
         ctx["selected_objects"] = [object_to_json(obj) for obj in object_selection]
 
         # Export bpy.data
-        data_to_export = self.object_types_to_export
+        data_to_export = object_types_to_export
         for datatype in data_to_export:
             #data[datatype] = [object_to_json(obj) for obj in getattr(bpy.data,datatype)]
             data[datatype] = {obj.name:object_to_json(obj) for obj in getattr(bpy.data, datatype)}
@@ -293,10 +307,10 @@ def export(self, context):
         json_data["blmod"] = {
             "mesh_data":{
                 "location":fn + ext,
-                "format":[{"type":x.datapath[0].node,"attr":x.datapath[1].node,"fmt":x.fmt} for x in self.vertex_format],
+                "format":[{"type":x.datapath[0].node,"attr":x.datapath[1].node,"fmt":x.fmt} for x in vertex_format],
                 "ranges":{obj.name:{"no_verts":no_verts_per_object[obj],"offset":offset[obj]} for obj in mesh_selection},
             },
-            "settings":{"apply_transforms":self.apply_transforms},
+            "settings":{"apply_transforms":apply_transforms},
             "no_frames":len(frame_range),
             "blender_version":bpy.app.version[:],
             #"version":bl_info["version"],
@@ -307,7 +321,7 @@ def export(self, context):
             json.dump(json_data, f_desc)
 
     # Save images (Cycles and Eevee materials)
-    if self.export_images:
+    if export_images:
         materials = {slot.material for o in mesh_selection for slot in o.material_slots}
         node_based_materials = [mat for mat in materials if mat.use_nodes]
         for mat in node_based_materials:

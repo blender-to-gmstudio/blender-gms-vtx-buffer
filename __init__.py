@@ -377,7 +377,8 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         #gms_vbx_operator_instance = self
 
         from . import export_gms_vtx_buffer
-        result = export_gms_vtx_buffer.export(self, context)
+        keywords = self.as_keywords(ignore=("check_existing", "filter_glob"))
+        result = export_gms_vtx_buffer.export(context, **keywords)
         gms_vbx_operator_instance = None
         global initialized
         initialized = True
