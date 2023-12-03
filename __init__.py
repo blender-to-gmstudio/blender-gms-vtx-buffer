@@ -57,7 +57,7 @@ gms_vbx_operator_instance = None
 # Whether the vertex format definition was initialized a first time or not
 initialized = False
 
-# List of currently supported sources
+# Set of currently supported sources
 supported_sources = {
     'MeshVertex',
     'MeshLoop',
@@ -70,14 +70,79 @@ supported_sources = {
     'Scene',
     'Object'
 }
+
 # Constant list containing all possible values at all levels
 items_glob = []
 for src in supported_sources:
-    rna = getattr(bpy.types,src).bl_rna
+    rna = getattr(bpy.types, src).bl_rna
     props = rna.properties
-    items_glob.append((rna.identifier,rna.name,rna.description))
-    items_glob.extend([(p.identifier,p.name,p.description) for p in props
-        if p.type not in ['POINTER','STRING','ENUM','COLLECTION']])
+    items_glob.append((rna.identifier, rna.name, rna.description))
+    items_glob.extend([(p.identifier, p.name, p.description) for p in props
+        if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']])
+
+supported_shader_node_sources = dict()
+
+TEMP_MAT_NAME = "Temporary Material"
+SUPPORTED_NODE_DATA_TYPES = ('VALUE', 'INT', 'BOOLEAN', 'VECTOR', 'ROTATION', 'RGBA')
+
+# Modified workaround to get shader inputs based on answer provided here: 
+# https://blender.stackexchange.com/a/254595
+# 
+def get_shader_nodes_inputs():
+    prefix = 'ShaderNode'
+    excluded = (prefix, 'ShaderNodeCustomGroup', 'ShaderNodeTree', 'ShaderNodeAddShader', ' ShaderNodeGroup', 'ShaderNodeScript', 'ShaderNodeOutputMaterial')
+    names = [n for n in dir(bpy.types) if n.startswith(prefix) and n not in excluded]
+
+    temp_mat = bpy.data.materials.get(TEMP_MAT_NAME)
+    if not temp_mat:
+        temp_mat = bpy.data.materials.new(TEMP_MAT_NAME)
+        
+    temp_mat.use_nodes = True
+    nodes = temp_mat.node_tree.nodes
+
+    out = dict()
+
+    for name in names:
+        nodes.clear()
+        n = nodes.new(name)
+        socket_to_dict = lambda s: (s.name, s.name, s.description)
+        inputs = [socket_to_dict(i) for i in n.inputs if i.type in SUPPORTED_NODE_DATA_TYPES]
+
+        # Don't return nodes that have no inputs
+        if len(inputs) == 0:
+            continue
+
+        out[name] = inputs
+        
+    nodes.clear()
+    bpy.data.materials.remove(temp_mat)
+
+    return out
+
+def get_shader_input_attr(shader_node_subclass, input_name, attr_name):
+    """A 'getattr' for shader nodes
+
+    shader_node_subclass: One of the subclasses of: https://docs.blender.org/api/current/bpy.types.ShaderNode.html
+    input_name: the input on which to look up the attribute
+    attr_name: the name of the attribute to look up
+
+    """
+
+    # Create a "dummy" material on which we can lookup inputs
+    temp_mat = bpy.data.materials.get(TEMP_MAT_NAME)
+    if not temp_mat:
+        temp_mat = bpy.data.materials.new(TEMP_MAT_NAME)
+        
+    temp_mat.use_nodes = True
+    nodes = temp_mat.node_tree.nodes
+    n = nodes.new(shader_node_subclass)
+
+    result = getattr(n.inputs[input_name], attr_name)
+
+    nodes.clear()
+    bpy.data.materials.remove(temp_mat)
+
+    return result
 
 class DataPathType(bpy.types.PropertyGroup):
     def items_callback(self, context):
@@ -89,9 +154,7 @@ class DataPathType(bpy.types.PropertyGroup):
         #gms_vbx_operator_instance = ExportGMSVertexBuffer.gms_vbx_operator_instance    # Doesn't work...
         #print("2 - " + str(id(gms_vbx_operator_instance)))
         if gms_vbx_operator_instance:
-            #print("okay")
             for attrib in gms_vbx_operator_instance.vertex_format:
-                #print(attrib)
                 try:
                     dp = attrib.datapath
                     index = dp.values().index(self)
@@ -102,22 +165,28 @@ class DataPathType(bpy.types.PropertyGroup):
                 global supported_sources
                 items = []
                 for src in supported_sources:
-                    rna = getattr(bpy.types,src).bl_rna
-                    items.append((rna.identifier,rna.name,rna.description))
+                    rna = getattr(bpy.types, src).bl_rna
+                    items.append((rna.identifier, rna.name, rna.description))
                 return items
             else:
                 value = dp[index-1].node
-                #print(value)
-                props = getattr(bpy.types,value).bl_rna.properties
-                items = [(p.identifier,p.name,p.description) for p in props
-                        if p.type not in ['POINTER','STRING','ENUM','COLLECTION']]
+                if value.startswith('ShaderNode'):
+                    # This item is for a shader node
+                    global supported_shader_node_sources
+                    items = []
+                    items.extend(supported_shader_node_sources[value])
+                else:
+                    # This item is for regular (Blender RNA) node
+                    props = getattr(bpy.types, value).bl_rna.properties
+                    items = [(p.identifier, p.name, p.description) for p in props
+                            if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']]
                 return items
         else:
             # Return a list of all possible values (direct export via console)
             return items_glob
 
     def set_format_from_type(self, context):
-        global gms_vbx_operator_instance
+        global gms_vbx_operator_instance, supported_shader_node_sources
         if gms_vbx_operator_instance:
             line = -1
             for l, attrib in enumerate(gms_vbx_operator_instance.vertex_format):
@@ -137,10 +206,22 @@ class DataPathType(bpy.types.PropertyGroup):
             if len(attribute.datapath) > 1:
                 type = attribute.datapath[0].node
                 attr = attribute.datapath[1].node
-                att = getattr(bpy.types,type).bl_rna.properties[attr]
-                map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}
-                type = map_fmt.get(att.type,'*')                   # Asterisk '*' means "I don't know what this should be..."
-                attribute.fmt = type * att.array_length if att.is_array else type
+                if type.startswith('ShaderNode'):
+                    datatype = get_shader_input_attr(type, attr, 'type')
+                    map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
+                    attribute.fmt = map_fmt[datatype]
+                else:
+                    att = getattr(bpy.types, type).bl_rna.properties[attr]
+                    map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # Mapping for RNA-based attributes
+                    datatype = map_fmt.get(att.type, '*')               # Asterisk '*' means "I don't know what this should be..."
+                    attribute.fmt = datatype * att.array_length if att.is_array else datatype
+                
+                # Update func as well for shader colors!
+                """
+                if datatype == 'RGBA':
+                    attribute.func = 'vec_to_bytes'
+                """
+
     node : bpy.props.EnumProperty(
         name="",
         description="Node",
@@ -152,8 +233,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
     def conversion_list(self, context):
         item_list = []
         item_list.append(("none", "None", "Don't convert the value"))
-        item_list.extend([(o[0],o[1].__name__,o[1].__doc__) for o in getmembers(conversions,isfunction)])
-        #print(item_list)
+        item_list.extend([(o[0], o[1].__name__, o[1].__doc__) for o in getmembers(conversions, isfunction)])
         return item_list
 
     # Actual properties
@@ -335,6 +415,21 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
 
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
+
+        # Update items list
+        # Do this here as we have access to bpy here
+        # bpy isn't properly initialized yet in global scope and returns "_RestrictedData"
+        global items_glob, supported_sources, supported_shader_node_sources
+
+        supported_shader_node_sources = get_shader_nodes_inputs()
+        vals = supported_shader_node_sources.keys()
+        supported_sources.update(vals)
+        for src in vals:
+            rna = getattr(bpy.types, src).bl_rna
+            print(rna.identifier, rna.name, rna.description)
+            items_glob.append((rna.identifier, rna.name, rna.description))
+            print([r for r in supported_shader_node_sources[src]])
+            items_glob.extend([r for r in supported_shader_node_sources[src]])
 
         """
         # Get presets folder location
