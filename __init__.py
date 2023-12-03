@@ -22,6 +22,10 @@ import os
 import shutil
 from . import conversions
 from . import panels
+from .shaders import (
+    get_shader_nodes_inputs,
+    get_shader_input_attr
+)
 from bpy.props import (
     StringProperty,
     BoolProperty,
@@ -70,8 +74,12 @@ supported_sources = {
     'Scene',
     'Object'
 }
+# Dictionary for storing shader node sources
+supported_shader_node_sources = dict()
 
 # Constant list containing all possible values at all levels
+# Start by adding all RNA-based properties
+# Shader node's inputs are added in ExportHelper.invoke
 items_glob = []
 for src in supported_sources:
     rna = getattr(bpy.types, src).bl_rna
@@ -80,69 +88,6 @@ for src in supported_sources:
     items_glob.extend([(p.identifier, p.name, p.description) for p in props
         if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']])
 
-supported_shader_node_sources = dict()
-
-TEMP_MAT_NAME = "Temporary Material"
-SUPPORTED_NODE_DATA_TYPES = ('VALUE', 'INT', 'BOOLEAN', 'VECTOR', 'ROTATION', 'RGBA')
-
-# Modified workaround to get shader inputs based on answer provided here: 
-# https://blender.stackexchange.com/a/254595
-# 
-def get_shader_nodes_inputs():
-    prefix = 'ShaderNode'
-    excluded = (prefix, 'ShaderNodeCustomGroup', 'ShaderNodeTree', 'ShaderNodeAddShader', ' ShaderNodeGroup', 'ShaderNodeScript', 'ShaderNodeOutputMaterial')
-    names = [n for n in dir(bpy.types) if n.startswith(prefix) and n not in excluded]
-
-    temp_mat = bpy.data.materials.get(TEMP_MAT_NAME)
-    if not temp_mat:
-        temp_mat = bpy.data.materials.new(TEMP_MAT_NAME)
-        
-    temp_mat.use_nodes = True
-    nodes = temp_mat.node_tree.nodes
-
-    out = dict()
-
-    for name in names:
-        nodes.clear()
-        n = nodes.new(name)
-        socket_to_dict = lambda s: (s.name, s.name, s.description)
-        inputs = [socket_to_dict(i) for i in n.inputs if i.type in SUPPORTED_NODE_DATA_TYPES]
-
-        # Don't return nodes that have no inputs
-        if len(inputs) == 0:
-            continue
-
-        out[name] = inputs
-        
-    nodes.clear()
-    bpy.data.materials.remove(temp_mat)
-
-    return out
-
-def get_shader_input_attr(shader_node_subclass, input_name, attr_name):
-    """A 'getattr' for shader nodes
-
-    shader_node_subclass: One of the subclasses of: https://docs.blender.org/api/current/bpy.types.ShaderNode.html
-    input_name: the input on which to look up the attribute
-    attr_name: the name of the attribute to look up
-
-    """
-
-    # Create a "dummy" material on which we can lookup inputs
-    temp_mat = bpy.data.materials.get(TEMP_MAT_NAME)
-    if not temp_mat:
-        temp_mat = bpy.data.materials.new(TEMP_MAT_NAME)
-        
-    temp_mat.use_nodes = True
-    nodes = temp_mat.node_tree.nodes
-    n = nodes.new(shader_node_subclass)
-
-    result = getattr(n.inputs[input_name], attr_name)
-
-    nodes.clear()
-    bpy.data.materials.remove(temp_mat)
-
-    return result
 
 class DataPathType(bpy.types.PropertyGroup):
     def items_callback(self, context):
@@ -207,8 +152,8 @@ class DataPathType(bpy.types.PropertyGroup):
                 type = attribute.datapath[0].node
                 attr = attribute.datapath[1].node
                 if type.startswith('ShaderNode'):
-                    datatype = get_shader_input_attr(type, attr, 'type')
                     map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
+                    datatype = get_shader_input_attr(type, attr, 'type')# Mapping for shader inputs
                     attribute.fmt = map_fmt[datatype]
                 else:
                     att = getattr(bpy.types, type).bl_rna.properties[attr]
@@ -316,7 +261,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     export_json_data : BoolProperty(
         name="Export Object Data",
         default = False,
-        description="Whether to export blender data (bpy.data) in JSON format (WARNING: very limited)",
+        description="Whether to export Blender data (bpy.data) in JSON format (WARNING: very limited)",
     )
 
     object_types_to_export : EnumProperty(
@@ -416,34 +361,16 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
 
-        # Update items list
-        # Do this here as we have access to bpy here
+        # Update items list, do this here as we have proper access to bpy here
         # bpy isn't properly initialized yet in global scope and returns "_RestrictedData"
         global items_glob, supported_sources, supported_shader_node_sources
-
         supported_shader_node_sources = get_shader_nodes_inputs()
         vals = supported_shader_node_sources.keys()
         supported_sources.update(vals)
         for src in vals:
             rna = getattr(bpy.types, src).bl_rna
-            print(rna.identifier, rna.name, rna.description)
             items_glob.append((rna.identifier, rna.name, rna.description))
-            print([r for r in supported_shader_node_sources[src]])
             items_glob.extend([r for r in supported_shader_node_sources[src]])
-
-        """
-        # Get presets folder location
-        paths = bpy.utils.preset_paths("")
-        paths = [p for p in paths if p.startswith(os.environ["USERPROFILE"])]
-        if paths:
-            path_base = paths[0]
-        path_rel = os.sep.join(["operator", ExportGMSVertexBuffer.bl_idname])
-        path = path_base + path_rel
-        print("The path to this addon's presets is:", path)
-
-        # Danger zone here!
-        bpy.utils.execfile(os.sep.join([path, "passthrough.py"]))
-        """
 
         # Do some custom initialization, not using any preset file.
         global initialized
