@@ -6,7 +6,8 @@ bl_info = {
     "blender": (2, 82, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
-    "wiki_url": "https://github.com/blender-to-gmstudio/blender-gms-vbx/wiki",
+    "doc_url": "https://github.com/blender-to-gmstudio/blender-gms-vbx/wiki",
+    "tracker_url": "https://github.com/blender-to-gmstudio/blender-gms-vtx-buffer/issues",
     "category": "Import-Export"}
 
 if "bpy" in locals():
