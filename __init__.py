@@ -22,6 +22,10 @@ import os
 import shutil
 from . import conversions
 from . import panels
+from .shaders import (
+    get_shader_nodes_inputs,
+    get_shader_input_attr
+)
 from bpy.props import (
     StringProperty,
     BoolProperty,
@@ -57,7 +61,7 @@ gms_vbx_operator_instance = None
 # Whether the vertex format definition was initialized a first time or not
 initialized = False
 
-# List of currently supported sources
+# Set of currently supported sources
 supported_sources = {
     'MeshVertex',
     'MeshLoop',
@@ -70,14 +74,20 @@ supported_sources = {
     'Scene',
     'Object'
 }
+# Dictionary for storing shader node sources
+supported_shader_node_sources = dict()
+
 # Constant list containing all possible values at all levels
+# Start by adding all RNA-based properties
+# Shader node's inputs are added in ExportHelper.invoke
 items_glob = []
 for src in supported_sources:
-    rna = getattr(bpy.types,src).bl_rna
+    rna = getattr(bpy.types, src).bl_rna
     props = rna.properties
-    items_glob.append((rna.identifier,rna.name,rna.description))
-    items_glob.extend([(p.identifier,p.name,p.description) for p in props
-        if p.type not in ['POINTER','STRING','ENUM','COLLECTION']])
+    items_glob.append((rna.identifier, rna.name, rna.description))
+    items_glob.extend([(p.identifier, p.name, p.description) for p in props
+        if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']])
+
 
 class DataPathType(bpy.types.PropertyGroup):
     def items_callback(self, context):
@@ -89,9 +99,7 @@ class DataPathType(bpy.types.PropertyGroup):
         #gms_vbx_operator_instance = ExportGMSVertexBuffer.gms_vbx_operator_instance    # Doesn't work...
         #print("2 - " + str(id(gms_vbx_operator_instance)))
         if gms_vbx_operator_instance:
-            #print("okay")
             for attrib in gms_vbx_operator_instance.vertex_format:
-                #print(attrib)
                 try:
                     dp = attrib.datapath
                     index = dp.values().index(self)
@@ -102,22 +110,28 @@ class DataPathType(bpy.types.PropertyGroup):
                 global supported_sources
                 items = []
                 for src in supported_sources:
-                    rna = getattr(bpy.types,src).bl_rna
-                    items.append((rna.identifier,rna.name,rna.description))
+                    rna = getattr(bpy.types, src).bl_rna
+                    items.append((rna.identifier, rna.name, rna.description))
                 return items
             else:
                 value = dp[index-1].node
-                #print(value)
-                props = getattr(bpy.types,value).bl_rna.properties
-                items = [(p.identifier,p.name,p.description) for p in props
-                        if p.type not in ['POINTER','STRING','ENUM','COLLECTION']]
+                if value.startswith('ShaderNode'):
+                    # This item is for a shader node
+                    global supported_shader_node_sources
+                    items = []
+                    items.extend(supported_shader_node_sources[value])
+                else:
+                    # This item is for regular (Blender RNA) node
+                    props = getattr(bpy.types, value).bl_rna.properties
+                    items = [(p.identifier, p.name, p.description) for p in props
+                            if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']]
                 return items
         else:
             # Return a list of all possible values (direct export via console)
             return items_glob
 
     def set_format_from_type(self, context):
-        global gms_vbx_operator_instance
+        global gms_vbx_operator_instance, supported_shader_node_sources
         if gms_vbx_operator_instance:
             line = -1
             for l, attrib in enumerate(gms_vbx_operator_instance.vertex_format):
@@ -137,10 +151,22 @@ class DataPathType(bpy.types.PropertyGroup):
             if len(attribute.datapath) > 1:
                 type = attribute.datapath[0].node
                 attr = attribute.datapath[1].node
-                att = getattr(bpy.types,type).bl_rna.properties[attr]
-                map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}
-                type = map_fmt.get(att.type,'*')                   # Asterisk '*' means "I don't know what this should be..."
-                attribute.fmt = type * att.array_length if att.is_array else type
+                if type.startswith('ShaderNode'):
+                    map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
+                    datatype = get_shader_input_attr(type, attr, 'type')# Mapping for shader inputs
+                    attribute.fmt = map_fmt[datatype]
+                else:
+                    att = getattr(bpy.types, type).bl_rna.properties[attr]
+                    map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # Mapping for RNA-based attributes
+                    datatype = map_fmt.get(att.type, '*')               # Asterisk '*' means "I don't know what this should be..."
+                    attribute.fmt = datatype * att.array_length if att.is_array else datatype
+                
+                # Update func as well for shader colors!
+                """
+                if datatype == 'RGBA':
+                    attribute.func = 'vec_to_bytes'
+                """
+
     node : bpy.props.EnumProperty(
         name="",
         description="Node",
@@ -150,18 +176,18 @@ class DataPathType(bpy.types.PropertyGroup):
 
 class VertexAttributeType(bpy.types.PropertyGroup):
     def conversion_list(self, context):
+        """ Get the list of conversion functions """
         item_list = []
         item_list.append(("none", "None", "Don't convert the value"))
-        item_list.extend([(o[0],o[1].__name__,o[1].__doc__) for o in getmembers(conversions,isfunction)])
-        #print(item_list)
+        item_list.extend([(o[0], o[1].__name__, o[1].__doc__) for o in getmembers(conversions, isfunction)])
         return item_list
 
     # Actual properties
     datapath : bpy.props.CollectionProperty(name="Path", type=DataPathType)
-    fmt : bpy.props.StringProperty(name="Fmt", description="The format string to be used for the binary data", default="fff")
-    int : bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
-    func : bpy.props.EnumProperty(name="Func", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
-    args : bpy.props.StringProperty(name="Args", description="A string representation in JSON of a dictionary with custom arguments to be passed to the function", default="")
+    fmt : bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
+    int : bpy.props.IntProperty(name="Lerp", description="Interpolation offset, i.e. 0 means write value at current frame, 1 means write value at next frame", default=0, min=0, max=1)
+    func : bpy.props.EnumProperty(name="Function", description="The 'pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
+    args : bpy.props.StringProperty(name="Params", description="A string representation in JSON of a dictionary with custom arguments to be passed to the 'pre-processing' function", default="")
 
 # @orientation_helper(axis_forward='-Z', axis_up='Y')
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
@@ -236,7 +262,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     export_json_data : BoolProperty(
         name="Export Object Data",
         default = False,
-        description="Whether to export blender data (bpy.data) in JSON format (WARNING: very limited)",
+        description="Whether to export Blender data (bpy.data) in JSON format (WARNING: very limited)",
     )
 
     object_types_to_export : EnumProperty(
@@ -268,11 +294,10 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     )
 
     def update_filter(self, context):
+        """Update the file filter"""
         params = context.space_data.params
-        if not self.custom_extension:
-            ext = ".vbx"
-        else:
-            ext = self.custom_extension
+        custom_ext = self.custom_extension
+        ext = ".vbx" if not custom_ext else custom_ext
         params.filter_glob = "*" + ext + ";*.json"
         bpy.ops.file.refresh()
 
@@ -336,19 +361,16 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
 
-        """
-        # Get presets folder location
-        paths = bpy.utils.preset_paths("")
-        paths = [p for p in paths if p.startswith(os.environ["USERPROFILE"])]
-        if paths:
-            path_base = paths[0]
-        path_rel = os.sep.join(["operator", ExportGMSVertexBuffer.bl_idname])
-        path = path_base + path_rel
-        print("The path to this addon's presets is:", path)
-
-        # Danger zone here!
-        bpy.utils.execfile(os.sep.join([path, "passthrough.py"]))
-        """
+        # Update items list, do this here as we have proper access to bpy here
+        # bpy isn't properly initialized yet in global scope and returns "_RestrictedData"
+        global items_glob, supported_sources, supported_shader_node_sources
+        supported_shader_node_sources = get_shader_nodes_inputs()
+        vals = supported_shader_node_sources.keys()
+        supported_sources.update(vals)
+        for src in vals:
+            rna = getattr(bpy.types, src).bl_rna
+            items_glob.append((rna.identifier, rna.name, rna.description))
+            items_glob.extend([r for r in supported_shader_node_sources[src]])
 
         # Do some custom initialization, not using any preset file.
         global initialized
@@ -388,7 +410,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
 # Operators to get the vertex format customization add/remove to work
 # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel
 class AddVertexAttributeOperator(bpy.types.Operator):
-    """Add a new attribute to the vertex format"""
+    """Add a new item to the vertex format"""
     bl_idname = "export_scene.add_attribute_operator"
     bl_label = "Add Vertex Attribute"
 

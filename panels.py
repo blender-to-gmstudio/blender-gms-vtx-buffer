@@ -63,28 +63,38 @@ class VBX_PT_export_attributes(bpy.types.Panel):
 
         self.layout.prop(operator, "export_mesh_data", text="")
         self.layout.label(text="", icon='MESH_DATA')
+        self.layout.operator("export_scene.add_attribute_operator", text="Add New Item")
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False  # No animation.
+        layout.grid_flow(columns=4, even_columns=True, even_rows=True, align=True)
 
         sfile = context.space_data
         operator = sfile.active_operator
 
         box = layout.box()
-        box.operator("export_scene.add_attribute_operator", text="Add")
 
         for index, item in enumerate(operator.vertex_format):
-            row = box.row()
+            attrib = box.box()
+            row = attrib.row()
+            row.label(text="Property")
             for node in item.datapath:
                 row.prop(node, property='node')
-            row.prop(item, property='fmt')
-            row.prop(item, property='func')
+            row = attrib.row()
+            row.label(text="Output")
+            row.prop(item, property='fmt', text="")
+            row.prop(item, property='func', text="")
+            row.prop(item, property='args', text="")
+            row = attrib.row()
+            row.label(text="Other")
             row.prop(item, property='int')
-            row.prop(item, property='args')
+            row = attrib.row()
+            row.label(text="")
             opt_remove = row.operator("export_scene.remove_attribute_operator", text="Remove")
             opt_remove.id = index
+            box.separator(factor=0)
 
 """
 class VBX_PT_export_footer(bpy.types.Panel):
