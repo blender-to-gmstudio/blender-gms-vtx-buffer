@@ -2,7 +2,7 @@ bl_info = {
     "name": "Export GameMaker Vertex Buffer",
     "description": "Exporter for GameMaker with highly customizable vertex format",
     "author": "Bart Teunis",
-    "version": (1, 0, 11),
+    "version": (1, 0, 13),
     "blender": (2, 82, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
