@@ -183,10 +183,10 @@ class VertexAttributeType(bpy.types.PropertyGroup):
 
     # Actual properties
     datapath : bpy.props.CollectionProperty(name="Path", type=DataPathType)
-    fmt : bpy.props.StringProperty(name="Fmt", description="The format string to be used for the binary data", default="fff")
-    int : bpy.props.IntProperty(name="Int", description="Interpolation offset, i.e. 0 means value at current frame, 1 means value at next frame", default=0, min=0, max=1)
-    func : bpy.props.EnumProperty(name="Func", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
-    args : bpy.props.StringProperty(name="Args", description="A string representation in JSON of a dictionary with custom arguments to be passed to the function", default="")
+    fmt : bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
+    int : bpy.props.IntProperty(name="Lerp", description="Interpolation offset, i.e. 0 means write value at current frame, 1 means write value at next frame", default=0, min=0, max=1)
+    func : bpy.props.EnumProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
+    args : bpy.props.StringProperty(name="Params", description="A string representation in JSON of a dictionary with custom arguments to be passed to the 'pre-processing' function", default="")
 
 # @orientation_helper(axis_forward='-Z', axis_up='Y')
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
@@ -410,7 +410,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
 # Operators to get the vertex format customization add/remove to work
 # See https://blender.stackexchange.com/questions/57545/can-i-make-a-ui-button-that-makes-buttons-in-a-panel
 class AddVertexAttributeOperator(bpy.types.Operator):
-    """Add a new attribute to the vertex format"""
+    """Add a new item to the vertex format"""
     bl_idname = "export_scene.add_attribute_operator"
     bl_label = "Add Vertex Attribute"
 
