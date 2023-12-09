@@ -176,6 +176,7 @@ class DataPathType(bpy.types.PropertyGroup):
 
 class VertexAttributeType(bpy.types.PropertyGroup):
     def conversion_list(self, context):
+        """ Get the list of conversion functions """
         item_list = []
         item_list.append(("none", "None", "Don't convert the value"))
         item_list.extend([(o[0], o[1].__name__, o[1].__doc__) for o in getmembers(conversions, isfunction)])
@@ -185,7 +186,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
     datapath : bpy.props.CollectionProperty(name="Path", type=DataPathType)
     fmt : bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int : bpy.props.IntProperty(name="Lerp", description="Interpolation offset, i.e. 0 means write value at current frame, 1 means write value at next frame", default=0, min=0, max=1)
-    func : bpy.props.EnumProperty(name="Function", description="'Pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
+    func : bpy.props.EnumProperty(name="Function", description="The 'pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
     args : bpy.props.StringProperty(name="Params", description="A string representation in JSON of a dictionary with custom arguments to be passed to the 'pre-processing' function", default="")
 
 # @orientation_helper(axis_forward='-Z', axis_up='Y')
@@ -293,11 +294,10 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     )
 
     def update_filter(self, context):
+        """Update the file filter"""
         params = context.space_data.params
-        if not self.custom_extension:
-            ext = ".vbx"
-        else:
-            ext = self.custom_extension
+        custom_ext = self.custom_extension
+        ext = ".vbx" if not custom_ext else custom_ext
         params.filter_glob = "*" + ext + ";*.json"
         bpy.ops.file.refresh()
 
