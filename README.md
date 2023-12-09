@@ -2,27 +2,24 @@
 
 This exporter can be used to export all kinds of vertex formats.
 
-## Description / Planned features
+## Description
 
-* Generates one or more files with vertex buffer contents
-* Optionally performs (destructive) preparation steps
-* Generates an accompanying json file that describes all exported content
-* Features (and ideas): 
-  * Customizable vertex format (Done)
-  * Static scenery (Done)
-  * Dynamic scenery (mesh data + offset per mesh/object in json file) (Done)
-  * Morphs & per-frame stuff, including interpolation (Done)
-  * A clean way to invert axes for both objects and mesh data => orientation_helper
-  * Shape keys
-  * Material/Shader properties
-  * line lists for particles, etc. ??
-  * Alternative ways to traverse the Blender RNA data
+* Generates a file with vertex buffer contents
+* Applies transforms & modifiers
+* Generates an accompanying JSON file that describes all exported content
+* Features: 
+  * Customizable vertex format, allowing for: 
+    * Static geometry batches
+    * Dynamic geometry batches (mesh data + offset per mesh/object in json file)
+    * Batched morphs
+  * Morphs & per-frame stuff, including interpolation
+  * Basic export of any material/shader properties
 
 ## Installing the plugin in Blender
 
 * In Blender, go to `Edit` > `Preferences`
 * Go to tab `Add-ons` and select `Install from File...`
-* Select the zip file `blender-gms-vtx-buffer-v1.0.12.zip` and confirm (the filename will be different for another version of the exporter)
+* Select the zip file `blender-gms-vtx-buffer-v1.0.13.zip` and confirm (the filename will be different for another version of the exporter)
 * Tick the checkbox next to `Import-Export: Export GameMaker Vertex Buffer`
 * Click `Save User Settings`
 * The plugin is now ready to be used
@@ -35,6 +32,7 @@ To install a new preset:
 * Navigate to `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.82\scripts\presets\operator`
 * Create a new directory with the name `export_scene.gms_vtx_buffer`. This is the bl_idname of the operator.
 * Place the preset file in this directory
+The included presets can be installed from the add-on's preferences
 
 ## Usage
 ### In Blender
@@ -44,11 +42,11 @@ To install a new preset:
 
 ### In GameMaker
 
-* Load the file in a buffer
-* Define the vertex format, either in the code editor or load it from the .json file
-* Create a vertex buffer from the buffer using the created vertex format
-* Create a shader with vertex attributes that correspond to the vertex format
-* Draw the model using the shader
+* Load the file as a buffer using [buffer_load](https://manual.gamemaker.io/monthly/en/GameMaker_Language/GML_Reference/Buffers/buffer_load.htm).
+* Define the vertex format, either in the code editor or load it from the JON file.
+* Create a vertex buffer from the buffer using the created vertex format.
+* Create a shader with vertex attributes that correspond to the vertex format.
+* Draw the model using the shader.
 
 To export the vertex format, tick `Export Object Data`.
 This generates an additional .json file which contains a description of the vertex format.
