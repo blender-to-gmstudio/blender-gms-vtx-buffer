@@ -1,4 +1,6 @@
 import bpy
+from struct import calcsize
+from .export_gms_vtx_buffer import BUFFER_TYPE
 
 """
 class VBX_PT_export_header(bpy.types.Panel):
@@ -63,38 +65,51 @@ class VBX_PT_export_attributes(bpy.types.Panel):
 
         self.layout.prop(operator, "export_mesh_data", text="")
         self.layout.label(text="", icon='MESH_DATA')
-        self.layout.operator("export_scene.add_attribute_operator", text="Add New Item")
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False  # No animation.
-        layout.grid_flow(columns=4, even_columns=True, even_rows=True, align=True)
+        layout.grid_flow(columns=0, even_columns=False, even_rows=False, align=True)
+        layout.alignment = 'LEFT'
 
         sfile = context.space_data
         operator = sfile.active_operator
 
-        box = layout.box()
+        contents = layout.box()
+        header_box = contents.box()
+        header_box.alignment = 'RIGHT'
+        r = header_box.row()
+        r.label(text="Vertex Data")
+        r.operator("export_scene.add_attribute_operator", text="Add Item")
 
+        format_box = contents.box()
+        format_string = ""
         for index, item in enumerate(operator.vertex_format):
-            attrib = box.box()
-            row = attrib.row()
-            row.label(text="Property")
+            box = format_box.box()
+            row = box.row()
+            group = row.row(align=True)
+            group.label(text="Source")
             for node in item.datapath:
-                row.prop(node, property='node')
-            row = attrib.row()
-            row.label(text="Output")
-            row.prop(item, property='fmt', text="")
-            row.prop(item, property='func', text="")
-            row.prop(item, property='args', text="")
-            row = attrib.row()
-            row.label(text="Other")
-            row.prop(item, property='int')
-            row = attrib.row()
-            row.label(text="")
-            opt_remove = row.operator("export_scene.remove_attribute_operator", text="Remove")
+                group.prop(node, property='node')
+            group = row.row(align=True)
+            group.label(text="Output")
+            group.prop(item, property='func', text="")
+            group.prop(item, property='fmt', text="")
+            format_string += item.fmt
+            group.prop(item, property='args', text="")
+            group = row.row(align=True)
+            group.label(text="Frame")
+            group.prop(item, property='int', text="")
+            group = row.row(align=True)
+            opt_remove = group.operator("export_scene.remove_attribute_operator", text="", icon='REMOVE')
             opt_remove.id = index
-            box.separator(factor=0)
+            #group.label(text=str(len(item.fmt)) + "x" + BUFFER_TYPE[item.fmt[0]])
+            row.separator(factor=0)
+        
+        info_box = contents.box()
+        info_box.label(text="Vertex format size: {0} bytes".format(calcsize(format_string)))
+
 
 """
 class VBX_PT_export_footer(bpy.types.Panel):
