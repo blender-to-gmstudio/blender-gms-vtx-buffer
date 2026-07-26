@@ -3,7 +3,7 @@ bl_info = {
     "description": "Exporter for GameMaker with highly customizable vertex format",
     "author": "Bart Teunis",
     "version": (1, 0, 14),
-    "blender": (2, 82, 0),
+    "blender": (4, 1, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
     "doc_url": "https://github.com/blender-to-gmstudio/blender-gms-vbx/wiki",
@@ -22,7 +22,7 @@ import sys
 import os
 import shutil
 from . import conversions
-from . import panels
+from .panels import *
 from .shaders import (
     get_shader_nodes_inputs,
     get_shader_input_attr
@@ -294,6 +294,12 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         description="Export texture images to same directory as result file",
     )
 
+    collection: StringProperty(
+        name="Source Collection",
+        description="Export only objects from this collection (and its children)",
+        default="",
+    )
+
     def update_filter(self, context):
         """Update the file filter"""
         params = context.space_data.params
@@ -382,7 +388,17 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         return {'RUNNING_MODAL'}
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        
+        is_file_browser = context.space_data.type == 'FILE_BROWSER'
+        
+        export_panel_general(layout, self, is_file_browser)
+        export_panel_attributes(layout, self, is_file_browser)
+        export_panel_transforms(layout, self, is_file_browser)
+        export_panel_object_data(layout, self, is_file_browser)
+        export_panel_extra(layout, self, is_file_browser)
 
     def cancel(self, context):
         global gms_vbx_operator_instance
@@ -454,6 +470,14 @@ class InstallVBXPresetsOperator(bpy.types.Operator):
 
         return {'FINISHED'}
 
+
+class IO_FH_vbx(bpy.types.FileHandler):
+    bl_idname = "IO_FH_vbx"
+    bl_label = "VBX (GameMaker Vertex Buffer)"
+    bl_export_operator = ExportGMSVertexBuffer.bl_idname
+    bl_file_extensions = ".vbx"
+
+
 def menu_func_export(self, context):
     self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GameMaker Vertex Buffer (*.vbx + *.json)")
 
@@ -466,11 +490,9 @@ classes = [
     InstallVBXPresetsOperator,
 ]
 
-panel_classes = [getattr(panels, c) for c in dir(panels) if c.startswith("VBX_PT_")]
-classes.extend(panel_classes)
-
 classes.append(VBXAddonPreferences)
 classes.append(ExportGMSVertexBuffer)
+classes.append(IO_FH_vbx)
 
 def register():
     for cls in classes:
