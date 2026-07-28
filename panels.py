@@ -97,3 +97,20 @@ def export_panel_extra(layout, operator, is_file_browser):
     if body:
         box = body.box()
         box.prop(operator, property='export_images')
+
+
+def export_panel_test(layout, operator, is_file_browser):
+    header, body = layout.panel("VBX_export_test", default_closed=False)
+
+    header.label(text="Vertex Format")
+
+    if body:
+        # See: properties_data_mesh.py
+        row = layout.row()
+        row.template_list("MATERIAL_UL_matslots_example", "", operator, "vertex_format", operator, "active_attribute_index", sort_lock=True)
+        col = row.column(align=True)
+        col.operator("export_scene.add_attribute_operator", text="", icon='ADD')
+        col.operator("export_scene.remove_attribute_operator", text="", icon='REMOVE')
+        col.separator()
+        col.operator("export_scene.move_up_attribute_operator", text="", icon='TRIA_UP')
+        col.operator("export_scene.move_down_attribute_operator", text="", icon='TRIA_DOWN')

@@ -29,6 +29,7 @@ from .shaders import (
 )
 from bpy.props import (
     StringProperty,
+    IntProperty,
     BoolProperty,
     EnumProperty,
     CollectionProperty,
@@ -299,6 +300,8 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         description="Export only objects from this collection (and its children)",
         default="",
     )
+    
+    active_attribute_index: IntProperty(name="Active Attribute Index")
 
     def update_filter(self, context):
         """Update the file filter"""
@@ -399,6 +402,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         export_panel_transforms(layout, self, is_file_browser)
         export_panel_object_data(layout, self, is_file_browser)
         export_panel_extra(layout, self, is_file_browser)
+        export_panel_test(layout, self, is_file_browser)
 
     def cancel(self, context):
         global gms_vbx_operator_instance
@@ -433,7 +437,12 @@ class AddVertexAttributeOperator(bpy.types.Operator):
 
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
-        item = context.active_operator.vertex_format.add()
+        op = context.active_operator
+        
+        # TODO Properly insert after active, not just append at end!
+        item = op.vertex_format.add()
+        op.active_attribute_index = len(op.vertex_format)-1
+        
         node = item.datapath.add()
         node.node = 'MeshVertex'
         item.datapath.add()
@@ -448,9 +457,45 @@ class RemoveVertexAttributeOperator(bpy.types.Operator):
 
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
-        context.active_operator.vertex_format.remove(self.id)
+        op = context.active_operator
+        op.vertex_format.remove(op.active_attribute_index)
+        if op.active_attribute_index == len(op.vertex_format):
+            op.active_attribute_index -= 1
         return {'FINISHED'}
 
+class MoveUpVertexAttributeOperator(bpy.types.Operator):
+    """Move up the selected attribute from the vertex format"""
+    bl_idname = "export_scene.move_up_attribute_operator"
+    bl_label = "Move Vertex Attribute Up"
+
+    def execute(self, context):
+        # context.active_operator refers to ExportGMSVertexBuffer instance
+        op = context.active_operator
+        
+        if op.active_attribute_index > 0:
+            # See: https://blender.stackexchange.com/a/23637
+            op.vertex_format.move(op.active_attribute_index, op.active_attribute_index-1)
+            op.active_attribute_index -= 1
+            return {'FINISHED'}
+        else:
+            return {'CANCELLED'}
+
+class MoveDownVertexAttributeOperator(bpy.types.Operator):
+    """Move down the selected attribute from the vertex format"""
+    bl_idname = "export_scene.move_down_attribute_operator"
+    bl_label = "Move Vertex Attribute Down"
+
+    def execute(self, context):
+        # context.active_operator refers to ExportGMSVertexBuffer instance
+        op = context.active_operator
+        
+        if op.active_attribute_index < len(op.vertex_format) - 1:
+            # See: https://blender.stackexchange.com/a/23637
+            op.vertex_format.move(op.active_attribute_index, op.active_attribute_index+1)
+            op.active_attribute_index += 1
+            return {'FINISHED'}
+        else:
+            return {'CANCELLED'}
 
 class InstallVBXPresetsOperator(bpy.types.Operator):
     """Install presets in (user) presets directory"""
@@ -482,12 +527,54 @@ def menu_func_export(self, context):
     self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GameMaker Vertex Buffer (*.vbx + *.json)")
 
 
+# TESTING: 
+class MATERIAL_UL_matslots_example(bpy.types.UIList):
+    # The draw_item function is called for each item of the collection that is visible in the list.
+    #   data is the RNA object containing the collection,
+    #   item is the current drawn item of the collection,
+    #   icon is the "computed" icon for the item (as an integer, because some objects like materials or textures
+    #   have custom icons ID, which are not available as enum items).
+    #   active_data is the RNA object containing the active property for the collection (i.e. integer pointing to the
+    #   active item of the collection).
+    #   active_propname is the name of the active property (use 'getattr(active_data, active_propname)').
+    #   index is index of the current item in the collection.
+    #   flt_flag is the result of the filtering process for this item.
+    #   Note: as index and flt_flag are optional arguments, you do not have to use/declare them here if you don't
+    #         need them.
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        # You should always start your row layout by a label (icon + text), or a non-embossed text field,
+        # this will also make the row easily selectable in the list! The later also enables ctrl-click rename.
+        # We use icon_value of label, as our given icon is an integer value, not an enum ID.
+        # Note "data" names should never be translated!
+        
+        #if ma:
+        #    layout.prop(ma, "name", text="", emboss=False, icon_value=icon)
+        #else:
+        #    layout.label(text="", translate=False, icon_value=icon)
+        
+        layout.label(text="Attr")
+        for node in item.datapath:
+                layout.prop(node, property='node')  # Works!
+        
+        layout.separator(type='LINE')
+        
+        layout.prop(item, property='func', text="")
+        layout.prop(item, property='fmt', text="")
+        
+        layout.separator(type='LINE')
+        
+        layout.prop(item, property='int', text="")
+
+
 classes = [
     DataPathType,
     VertexAttributeType,
     AddVertexAttributeOperator,
     RemoveVertexAttributeOperator,
+    MoveUpVertexAttributeOperator,
+    MoveDownVertexAttributeOperator,
     InstallVBXPresetsOperator,
+    MATERIAL_UL_matslots_example,
 ]
 
 classes.append(VBXAddonPreferences)
@@ -497,7 +584,7 @@ classes.append(IO_FH_vbx)
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-
+    
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
 
 
