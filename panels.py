@@ -97,3 +97,28 @@ def export_panel_extra(layout, operator, is_file_browser):
     if body:
         box = body.box()
         box.prop(operator, property='export_images')
+
+
+def export_panel_test(layout, operator, is_file_browser):
+    header, body = layout.panel("VBX_export_test", default_closed=False)
+
+    header.use_property_split = False
+    header.prop(operator, "export_mesh_data", text="")
+    header.label(text="Mesh Data", icon='MESH_DATA')
+
+    if body:
+        # See: properties_data_mesh.py
+        contents = layout.box()
+        box = contents.box()
+        row = box.row()
+        row.template_list("VBX_UL_vertex_format", "", operator, "vertex_format", operator, "active_attribute_index", sort_lock=True)
+        col = row.column(align=True)
+        col.operator("export_scene.add_attribute_operator", text="", icon='ADD')
+        col.operator("export_scene.remove_attribute_operator", text="", icon='REMOVE')
+        col.separator()
+        col.operator("export_scene.move_up_attribute_operator", text="", icon='TRIA_UP')
+        col.operator("export_scene.move_down_attribute_operator", text="", icon='TRIA_DOWN')
+        
+        info_box = contents.box()
+        #info_box.label(text="Vertex format size: {0} bytes".format(calcsize(format_string)))
+        info_box.label(text="Vertex format size: {0} bytes".format(""))

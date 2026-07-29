@@ -29,6 +29,7 @@ from .shaders import (
 )
 from bpy.props import (
     StringProperty,
+    IntProperty,
     BoolProperty,
     EnumProperty,
     CollectionProperty,
@@ -192,11 +193,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
 
 # @orientation_helper(axis_forward='-Z', axis_up='Y')
 class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
-    """
-
-    Export (a selection of) the current scene to a vertex buffer, including textures and a description file in JSON format
-
-    """
+    """Export (a selection of) the current scene to a vertex buffer, including textures and a description file in JSON format"""
 
     bl_idname = "export_scene.gms_vtx_buffer"
     bl_label = "Export GameMaker Vertex Buffer"
@@ -299,6 +296,8 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         description="Export only objects from this collection (and its children)",
         default="",
     )
+    
+    active_attribute_index: IntProperty(name="Active Attribute Index")
 
     def update_filter(self, context):
         """Update the file filter"""
@@ -396,6 +395,7 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         
         export_panel_general(layout, self, is_file_browser)
         export_panel_attributes(layout, self, is_file_browser)
+        export_panel_test(layout, self, is_file_browser)
         export_panel_transforms(layout, self, is_file_browser)
         export_panel_object_data(layout, self, is_file_browser)
         export_panel_extra(layout, self, is_file_browser)
@@ -433,7 +433,12 @@ class AddVertexAttributeOperator(bpy.types.Operator):
 
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
-        item = context.active_operator.vertex_format.add()
+        op = context.active_operator
+        
+        # TODO Properly insert after active, not just append at end!
+        item = op.vertex_format.add()
+        op.active_attribute_index = len(op.vertex_format)-1
+        
         node = item.datapath.add()
         node.node = 'MeshVertex'
         item.datapath.add()
@@ -448,9 +453,45 @@ class RemoveVertexAttributeOperator(bpy.types.Operator):
 
     def execute(self, context):
         # context.active_operator refers to ExportGMSVertexBuffer instance
-        context.active_operator.vertex_format.remove(self.id)
+        op = context.active_operator
+        op.vertex_format.remove(op.active_attribute_index)
+        if op.active_attribute_index == len(op.vertex_format):
+            op.active_attribute_index -= 1
         return {'FINISHED'}
 
+class MoveUpVertexAttributeOperator(bpy.types.Operator):
+    """Move up the selected attribute from the vertex format"""
+    bl_idname = "export_scene.move_up_attribute_operator"
+    bl_label = "Move Vertex Attribute Up"
+
+    def execute(self, context):
+        # context.active_operator refers to ExportGMSVertexBuffer instance
+        op = context.active_operator
+        
+        if op.active_attribute_index > 0:
+            # See: https://blender.stackexchange.com/a/23637
+            op.vertex_format.move(op.active_attribute_index, op.active_attribute_index-1)
+            op.active_attribute_index -= 1
+            return {'FINISHED'}
+        else:
+            return {'CANCELLED'}
+
+class MoveDownVertexAttributeOperator(bpy.types.Operator):
+    """Move down the selected attribute from the vertex format"""
+    bl_idname = "export_scene.move_down_attribute_operator"
+    bl_label = "Move Vertex Attribute Down"
+
+    def execute(self, context):
+        # context.active_operator refers to ExportGMSVertexBuffer instance
+        op = context.active_operator
+        
+        if op.active_attribute_index < len(op.vertex_format) - 1:
+            # See: https://blender.stackexchange.com/a/23637
+            op.vertex_format.move(op.active_attribute_index, op.active_attribute_index+1)
+            op.active_attribute_index += 1
+            return {'FINISHED'}
+        else:
+            return {'CANCELLED'}
 
 class InstallVBXPresetsOperator(bpy.types.Operator):
     """Install presets in (user) presets directory"""
@@ -482,12 +523,44 @@ def menu_func_export(self, context):
     self.layout.operator(ExportGMSVertexBuffer.bl_idname, text="GameMaker Vertex Buffer (*.vbx + *.json)")
 
 
+# See: https://docs.blender.org/api/current/bpy.types.UIList.html
+# 
+class VBX_UL_vertex_format(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        row = layout.row()
+        
+        group = row.row(align=True)
+        
+        group.label(text="Source")
+        for node in item.datapath:
+                group.prop(node, property='node')
+        
+        row.separator(type='LINE')
+        
+        group = row.row(align=True)
+        
+        group.label(text="Output")
+        group.prop(item, property='func', text="")
+        group.prop(item, property='fmt', text="")
+        group.prop(item, property='args', text="")
+        
+        row.separator(type='LINE')
+        
+        group = row.row(align=True)
+        
+        group.label(text="Frame")
+        group.prop(item, property='int', text="")
+
+
 classes = [
     DataPathType,
     VertexAttributeType,
     AddVertexAttributeOperator,
     RemoveVertexAttributeOperator,
+    MoveUpVertexAttributeOperator,
+    MoveDownVertexAttributeOperator,
     InstallVBXPresetsOperator,
+    VBX_UL_vertex_format,
 ]
 
 classes.append(VBXAddonPreferences)
@@ -497,7 +570,7 @@ classes.append(IO_FH_vbx)
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-
+    
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
 
 
