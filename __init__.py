@@ -3,7 +3,7 @@ bl_info = {
     "description": "Exporter for GameMaker with highly customizable vertex format",
     "author": "Bart Teunis",
     "version": (1, 0, 14),
-    "blender": (4, 1, 0),
+    "blender": (4, 2, 0),
     "location": "File > Export",
     "warning": "", # used for warning icon and text in addons panel
     "doc_url": "https://github.com/blender-to-gmstudio/blender-gms-vbx/wiki",
