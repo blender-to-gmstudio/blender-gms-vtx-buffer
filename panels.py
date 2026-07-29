@@ -19,49 +19,32 @@ def export_panel_general(layout, operator, is_file_browser):
 
 
 def export_panel_attributes(layout, operator, is_file_browser):
-    header, body = layout.panel("VBX_export_attributes")
-    
+    header, body = layout.panel("VBX_export_attributes", default_closed=False)
+
     header.use_property_split = False
     header.prop(operator, "export_mesh_data", text="")
     header.label(text="Mesh Data", icon='MESH_DATA')
-    
+
     if body:
-        body.grid_flow(columns=0, even_columns=False, even_rows=False, align=True)
-        body.alignment = 'LEFT'
-
-        contents = body.box()
-        header_box = contents.box()
-        header_box.alignment = 'RIGHT'
-        r = header_box.row()
-        r.label(text="Vertex Data")
-        r.operator("export_scene.add_attribute_operator", text="Add Item")
-
-        format_box = contents.box()
-        format_string = ""
-        for index, item in enumerate(operator.vertex_format):
-            box = format_box.box()
-            row = box.row()
-            group = row.row(align=True)
-            group.label(text="Source")
-            for node in item.datapath:
-                group.prop(node, property='node')
-            group = row.row(align=True)
-            group.label(text="Output")
-            group.prop(item, property='func', text="")
-            group.prop(item, property='fmt', text="")
-            format_string += item.fmt
-            group.prop(item, property='args', text="")
-            group = row.row(align=True)
-            group.label(text="Frame")
-            group.prop(item, property='int', text="")
-            group = row.row(align=True)
-            opt_remove = group.operator("export_scene.remove_attribute_operator", text="", icon='REMOVE')
-            opt_remove.id = index
-            #group.label(text=str(len(item.fmt)) + "x" + BUFFER_TYPE[item.fmt[0]])
-            row.separator(factor=0)
+        # See: properties_data_mesh.py (built-in Blender panel)
+        contents = layout.box()
+        
+        box_header = contents.box()
+        box_header.label(text="Vertex Data")
+        
+        box = contents.box()
+        row = box.row()
+        row.template_list("VBX_UL_vertex_format", "", operator, "vertex_format", operator, "active_attribute_index", sort_lock=True)
+        col = row.column(align=True)
+        col.operator("export_scene.add_attribute_operator", text="", icon='ADD')
+        col.operator("export_scene.remove_attribute_operator", text="", icon='REMOVE')
+        col.separator()
+        col.operator("export_scene.move_up_attribute_operator", text="", icon='TRIA_UP')
+        col.operator("export_scene.move_down_attribute_operator", text="", icon='TRIA_DOWN')
         
         info_box = contents.box()
-        info_box.label(text="Vertex format size: {0} bytes".format(calcsize(format_string)))
+        #info_box.label(text="Vertex format size: {0} bytes".format(calcsize(format_string)))
+        info_box.label(text="Vertex format size: {0} bytes".format(""))
 
 
 def export_panel_transforms(layout, operator, is_file_browser):
@@ -97,28 +80,3 @@ def export_panel_extra(layout, operator, is_file_browser):
     if body:
         box = body.box()
         box.prop(operator, property='export_images')
-
-
-def export_panel_test(layout, operator, is_file_browser):
-    header, body = layout.panel("VBX_export_test", default_closed=False)
-
-    header.use_property_split = False
-    header.prop(operator, "export_mesh_data", text="")
-    header.label(text="Mesh Data", icon='MESH_DATA')
-
-    if body:
-        # See: properties_data_mesh.py
-        contents = layout.box()
-        box = contents.box()
-        row = box.row()
-        row.template_list("VBX_UL_vertex_format", "", operator, "vertex_format", operator, "active_attribute_index", sort_lock=True)
-        col = row.column(align=True)
-        col.operator("export_scene.add_attribute_operator", text="", icon='ADD')
-        col.operator("export_scene.remove_attribute_operator", text="", icon='REMOVE')
-        col.separator()
-        col.operator("export_scene.move_up_attribute_operator", text="", icon='TRIA_UP')
-        col.operator("export_scene.move_down_attribute_operator", text="", icon='TRIA_DOWN')
-        
-        info_box = contents.box()
-        #info_box.label(text="Vertex format size: {0} bytes".format(calcsize(format_string)))
-        info_box.label(text="Vertex format size: {0} bytes".format(""))

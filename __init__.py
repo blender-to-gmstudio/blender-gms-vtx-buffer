@@ -395,7 +395,6 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         
         export_panel_general(layout, self, is_file_browser)
         export_panel_attributes(layout, self, is_file_browser)
-        export_panel_test(layout, self, is_file_browser)
         export_panel_transforms(layout, self, is_file_browser)
         export_panel_object_data(layout, self, is_file_browser)
         export_panel_extra(layout, self, is_file_browser)
