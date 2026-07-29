@@ -43,8 +43,8 @@ def export_panel_attributes(layout, operator, is_file_browser):
         col.operator("export_scene.move_down_attribute_operator", text="", icon='TRIA_DOWN')
         
         info_box = contents.box()
-        #info_box.label(text="Vertex format size: {0} bytes".format(calcsize(format_string)))
-        info_box.label(text="Vertex format size: {0} bytes".format(""))
+        format_string = "".join([item.fmt for item in operator.vertex_format])
+        info_box.label(text="Vertex format size: {0} bytes".format(calcsize(format_string)))
 
 
 def export_panel_transforms(layout, operator, is_file_browser):
