@@ -434,7 +434,6 @@ class AddVertexAttributeOperator(bpy.types.Operator):
         # context.active_operator refers to ExportGMSVertexBuffer instance
         op = context.active_operator
         
-        # TODO Properly insert after active, not just append at end!
         item = op.vertex_format.add()
         op.active_attribute_index = len(op.vertex_format)-1
         
