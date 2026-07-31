@@ -56,9 +56,6 @@ class VBXAddonPreferences(AddonPreferences):
         layout.label(text = "WARNING: existing presets with the same name will be overwritten!")
         layout.operator("export_scene.install_vbx_presets", text="Install Presets")
 
-# The current operator instance
-# Equals None when exporting via console (direct function call)
-gms_vbx_operator_instance = None
 
 # Whether the vertex format definition was initialized a first time or not
 initialized = False
@@ -74,7 +71,8 @@ supported_sources = {
     'MeshLoopColor',
     'MeshPolygon',
     'Scene',
-    'Object'
+    'Object',
+    'ShaderNodeBsdfPrincipled',    # indirect via .inputs (keys obtained via inputs.keys())
 }
 # Dictionary for storing shader node sources
 supported_shader_node_sources = dict()
@@ -91,91 +89,6 @@ for src in supported_sources:
         if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']])
 
 
-class DataPathType(bpy.types.PropertyGroup):
-    def items_callback(self, context):
-        global gms_vbx_operator_instance
-        #print(gms_vbx_operator_instance)
-        index = 0
-        dp = None
-        #gms_vbx_operator_instance = bpy.ops.export_scene.gms_blmod.get_instance()      # Returns a new instance?
-        #gms_vbx_operator_instance = ExportGMSVertexBuffer.gms_vbx_operator_instance    # Doesn't work...
-        #print("2 - " + str(id(gms_vbx_operator_instance)))
-        if gms_vbx_operator_instance:
-            for attrib in gms_vbx_operator_instance.vertex_format:
-                try:
-                    dp = attrib.datapath
-                    index = dp.values().index(self)
-                    break
-                except ValueError:
-                    continue
-            if index == 0:
-                global supported_sources
-                items = []
-                for src in supported_sources:
-                    rna = getattr(bpy.types, src).bl_rna
-                    items.append((rna.identifier, rna.name, rna.description))
-                return items
-            else:
-                value = dp[index-1].node
-                if value.startswith('ShaderNode'):
-                    # This item is for a shader node
-                    global supported_shader_node_sources
-                    items = []
-                    items.extend(supported_shader_node_sources[value])
-                else:
-                    # This item is for regular (Blender RNA) node
-                    props = getattr(bpy.types, value).bl_rna.properties
-                    items = [(p.identifier, p.name, p.description) for p in props
-                            if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']]
-                return items
-        else:
-            # Return a list of all possible values (direct export via console)
-            return items_glob
-
-    def set_format_from_type(self, context):
-        global gms_vbx_operator_instance, supported_shader_node_sources
-        if gms_vbx_operator_instance:
-            line = -1
-            for l, attrib in enumerate(gms_vbx_operator_instance.vertex_format):
-                # Which line is this EnumProperty on as seen from the operator?
-                # (Is there any other, better way to do this?)
-                #print(attrib)
-                try:
-                    dp = attrib.datapath
-                    index = dp.values().index(self)
-                    line = l
-                    break
-                except ValueError:
-                    continue
-
-            #print(line, index)
-            attribute = gms_vbx_operator_instance.vertex_format[line]
-            if len(attribute.datapath) > 1:
-                type = attribute.datapath[0].node
-                attr = attribute.datapath[1].node
-                if type.startswith('ShaderNode'):
-                    map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
-                    datatype = get_shader_input_attr(type, attr, 'type')# Mapping for shader inputs
-                    attribute.fmt = map_fmt[datatype]
-                else:
-                    att = getattr(bpy.types, type).bl_rna.properties[attr]
-                    map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # Mapping for RNA-based attributes
-                    datatype = map_fmt.get(att.type, '*')               # Asterisk '*' means "I don't know what this should be..."
-                    attribute.fmt = datatype * att.array_length if att.is_array else datatype
-                
-                # Update func as well for shader colors!
-                """
-                if datatype == 'RGBA':
-                    attribute.func = 'vec_to_bytes'
-                """
-
-    node : bpy.props.EnumProperty(
-        name="",
-        description="Node",
-        items=items_callback,
-        update=set_format_from_type,
-    )
-
 class VertexAttributeType(bpy.types.PropertyGroup):
     def conversion_list(self, context):
         """ Get the list of conversion functions """
@@ -184,8 +97,47 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         item_list.extend([(o[0], o[1].__name__, o[1].__doc__) for o in getmembers(conversions, isfunction)])
         return item_list
 
+    def properties_callback(self, context):
+        source = self.data_source
+        if source.startswith('ShaderNode'):
+            # This item is for a shader node
+            global supported_shader_node_sources
+            items = []
+            items.extend(supported_shader_node_sources[source])
+        else:
+            # This item is for regular (Blender RNA) node
+            props = getattr(bpy.types, self.data_source).bl_rna.properties
+            items = [(p.identifier, p.name, p.description) for p in props
+                    if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']]
+        return items
+
+    def sources_callback(self, context):
+        global supported_sources
+        items = []
+        for src in supported_sources:
+            rna = getattr(bpy.types, src).bl_rna
+            items.append((rna.identifier, rna.name, rna.description))
+        
+        return items
+
+    def set_format_from_type(self, context):
+        type = self.data_source
+        attr = self.data_property
+        op = context.active_operator
+        attribute = op.vertex_format[op.active_attribute_index]
+        if type.startswith('ShaderNode'):
+            map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
+            datatype = get_shader_input_attr(type, attr, 'type')# Mapping for shader inputs
+            attribute.fmt = map_fmt[datatype]
+        else:
+            att = getattr(bpy.types, type).bl_rna.properties[attr]
+            map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # Mapping for RNA-based attributes
+            datatype = map_fmt.get(att.type, '*')               # Asterisk '*' means "I don't know what this should be..."
+            attribute.fmt = datatype * att.array_length if att.is_array else datatype
+
     # Actual properties
-    datapath : bpy.props.CollectionProperty(name="Path", type=DataPathType)
+    data_source: bpy.props.EnumProperty(name="Source",description="Data Source",items=sources_callback,update=set_format_from_type)
+    data_property: bpy.props.EnumProperty(name="Property",description="Property",items=properties_callback,update=set_format_from_type)
     fmt : bpy.props.StringProperty(name="Format", description="The format string to be used for the binary data", default="fff")
     int : bpy.props.IntProperty(name="Lerp", description="Interpolation offset, i.e. 0 means write value at current frame, 1 means write value at next frame", default=0, min=0, max=1)
     func : bpy.props.EnumProperty(name="Function", description="The 'pre-processing' function to be called before conversion to binary format", items=conversion_list, update=None)
@@ -313,9 +265,10 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         default="",
         update=update_filter    # See Blender issue 104221
     )
-
+    
+    """
     def init_passthrough(self):
-        """Initialize the export properties for a passthrough export"""
+        """"Initialize the export properties for a passthrough export""""
         op = self
 
         # op.vertex_format.clear()
@@ -358,12 +311,9 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         item_sub_1.int = 0
         item_sub_1.func = 'invert_v'
         item_sub_1.args = ''
+    """
 
     def invoke(self, context, event):
-        # Lookup operator instance from global scope
-        global gms_vbx_operator_instance
-        gms_vbx_operator_instance = self
-
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
 
@@ -372,16 +322,17 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         global items_glob, supported_sources, supported_shader_node_sources
         supported_shader_node_sources = get_shader_nodes_inputs()
         vals = supported_shader_node_sources.keys()
-        supported_sources.update(vals)
-        for src in vals:
-            rna = getattr(bpy.types, src).bl_rna
-            items_glob.append((rna.identifier, rna.name, rna.description))
-            items_glob.extend([r for r in supported_shader_node_sources[src]])
+        #supported_sources.update(vals)
+        #for src in vals:
+        #    rna = getattr(bpy.types, src).bl_rna
+        #    items_glob.append((rna.identifier, rna.name, rna.description))
+        #    items_glob.extend([r for r in supported_shader_node_sources[src]])
 
         # Do some custom initialization, not using any preset file.
         global initialized
         if not initialized:
-            ExportGMSVertexBuffer.init_passthrough(self)
+            #ExportGMSVertexBuffer.init_passthrough(self)
+            pass
 
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -400,9 +351,6 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         export_panel_extra(layout, self, is_file_browser)
 
     def cancel(self, context):
-        global gms_vbx_operator_instance
-        gms_vbx_operator_instance = None
-
         # Cleanup: remove dynamic property from class
         del bpy.types.Object.batch_index
 
@@ -410,14 +358,9 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         # Putting this here seems to fix #22
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")
 
-        # This one seems to be required, too?
-        global gms_vbx_operator_instance
-        #gms_vbx_operator_instance = self
-
         from . import export_gms_vtx_buffer
-        keywords = self.as_keywords(ignore=("check_existing", "filter_glob"))
+        keywords = self.as_keywords(ignore=("check_existing", "filter_glob", "active_attribute_index"))
         result = export_gms_vtx_buffer.export(context, **keywords)
-        gms_vbx_operator_instance = None
         global initialized
         initialized = True
         return result
@@ -437,9 +380,7 @@ class AddVertexAttributeOperator(bpy.types.Operator):
         item = op.vertex_format.add()
         op.active_attribute_index = len(op.vertex_format)-1
         
-        node = item.datapath.add()
-        node.node = 'MeshVertex'
-        item.datapath.add()
+        item.data_source = 'MeshVertex'
         return {'FINISHED'}
 
 class RemoveVertexAttributeOperator(bpy.types.Operator):
@@ -530,8 +471,10 @@ class VBX_UL_vertex_format(bpy.types.UIList):
         group = row.row(align=True)
         
         group.label(text="Source")
-        for node in item.datapath:
-                group.prop(node, property='node')
+        #for node in item.datapath:
+        #    group.prop(node, property='node')
+        group.prop(item, 'data_source', text="")
+        group.prop(item, 'data_property', text="")
         
         row.separator(type='LINE')
         
@@ -551,7 +494,6 @@ class VBX_UL_vertex_format(bpy.types.UIList):
 
 
 classes = [
-    DataPathType,
     VertexAttributeType,
     AddVertexAttributeOperator,
     RemoveVertexAttributeOperator,

@@ -196,6 +196,7 @@ def object_to_json(obj):
 def export(context, filepath,
         file_mode,
         selection_only,
+        collection,
         vertex_format,
         reverse_loop,
         frame_option,
@@ -250,8 +251,8 @@ def export(context, filepath,
         from . import conversions
 
         attribs = [(
-            attrib.datapath[0].node,    # Node on which to look up attribute
-            attrib.datapath[1].node,    # attribute to look up on the node
+            attrib.data_source,    # Node on which to look up attribute
+            attrib.data_property,  # Attribute to look up on the node
             attrib.fmt,
             attrib.int,
             None if attrib.func == "none" else getattr(conversions, attrib.func),
@@ -322,7 +323,7 @@ def export(context, filepath,
         json_data["blmod"] = {
             "mesh_data":{
                 "location":fn + ext,
-                "format":[{"type":x.datapath[0].node,"attr":x.datapath[1].node,"fmt":x.fmt} for x in vertex_format],
+                "format":[{"type":x.data_source[0].node,"attr":x.data_property[1].node,"fmt":x.fmt} for x in vertex_format],
                 "ranges":{obj.name:{"no_verts":no_verts_per_object[obj],"offset":offset[obj]} for obj in mesh_selection},
             },
             "settings":{"apply_transforms":apply_transforms},
