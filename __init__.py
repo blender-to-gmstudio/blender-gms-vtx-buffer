@@ -123,17 +123,15 @@ class VertexAttributeType(bpy.types.PropertyGroup):
     def set_format_from_type(self, context):
         type = self.data_source
         attr = self.data_property
-        op = context.active_operator
-        attribute = op.vertex_format[op.active_attribute_index]
         if type.startswith('ShaderNode'):
             map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
             datatype = get_shader_input_attr(type, attr, 'type')# Mapping for shader inputs
-            attribute.fmt = map_fmt[datatype]
+            self.fmt = map_fmt[datatype]
         else:
             att = getattr(bpy.types, type).bl_rna.properties[attr]
             map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # Mapping for RNA-based attributes
             datatype = map_fmt.get(att.type, '*')               # Asterisk '*' means "I don't know what this should be..."
-            attribute.fmt = datatype * att.array_length if att.is_array else datatype
+            self.fmt = datatype * att.array_length if att.is_array else datatype
 
     # Actual properties
     data_source: bpy.props.EnumProperty(name="Source",description="Data Source",items=sources_callback,update=set_format_from_type)
