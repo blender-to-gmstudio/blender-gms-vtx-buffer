@@ -17,7 +17,7 @@ def get_shader_nodes_inputs():
     temp_mat = bpy.data.materials.get(TEMP_MAT_NAME)
     if not temp_mat:
         temp_mat = bpy.data.materials.new(TEMP_MAT_NAME)
-        
+    
     temp_mat.use_nodes = True
     nodes = temp_mat.node_tree.nodes
 

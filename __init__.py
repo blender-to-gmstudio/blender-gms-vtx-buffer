@@ -44,6 +44,27 @@ from inspect import (
     isfunction,
     )
 
+# Supported properties for all shader nodes & initialisation function
+# Used to populate VertexAttributeType.data_property in case of a ShaderNode source
+# 
+# Also store original shader node per prop name because get_shader_input_attr()
+# doesn't work with ShaderNode, it needs a specific subclass.
+supported_shader_node_properties = []
+original_shader_nodes_per_prop_name = dict()
+
+def init_shader_node_props():
+    """Populate the list with the unique set of all shader nodes' available inputs"""
+    
+    global supported_shader_node_properties
+    mapping = dict()
+    shader_nodes = get_shader_nodes_inputs()
+    for shader_node_name, inputs in shader_nodes.items():
+        for input in inputs:
+            mapping[input[0]] = input
+            original_shader_nodes_per_prop_name[input[0]] = shader_node_name
+    supported_shader_node_properties = [v for v in mapping.values()]
+    
+    #print(original_shader_nodes_per_prop_name)
 
 class VBXAddonPreferences(AddonPreferences):
     # this must match the add-on name, use '__package__'
@@ -55,36 +76,6 @@ class VBXAddonPreferences(AddonPreferences):
         layout.label(text = "Install default export presets that come with the add-on.")
         layout.label(text = "WARNING: existing presets with the same name will be overwritten!")
         layout.operator("export_scene.install_vbx_presets", text="Install Presets")
-
-
-# Set of currently supported sources
-supported_sources = {
-    'MeshVertex',
-    'MeshLoop',
-    'MeshUVLoop',
-    #'ShapeKeyPoint',
-    #'VertexGroupElement',
-    'Material',
-    'MeshLoopColor',
-    'MeshPolygon',
-    'Scene',
-    'Object',
-    'ShaderNodeBsdfPrincipled',    # indirect via .inputs (keys obtained via inputs.keys())
-}
-# Dictionary for storing shader node sources
-supported_shader_node_sources = dict()
-
-# Constant list containing all possible values at all levels
-# Start by adding all RNA-based properties
-# Shader node's inputs are added in ExportHelper.invoke
-items_glob = []
-for src in supported_sources:
-    rna = getattr(bpy.types, src).bl_rna
-    props = rna.properties
-    items_glob.append((rna.identifier, rna.name, rna.description))
-    items_glob.extend([(p.identifier, p.name, p.description) for p in props
-        if p.type not in ['POINTER', 'STRING', 'ENUM', 'COLLECTION']])
-
 
 class VertexAttributeType(bpy.types.PropertyGroup):
     def conversion_list(self, context):
@@ -98,9 +89,8 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         source = self.data_source
         if source.startswith('ShaderNode'):
             # This item is for a shader node
-            global supported_shader_node_sources
-            items = []
-            items.extend(supported_shader_node_sources[source])
+            global supported_shader_node_properties
+            items = [prop for prop in supported_shader_node_properties]
         else:
             # This item is for regular (Blender RNA) node
             props = getattr(bpy.types, self.data_source).bl_rna.properties
@@ -109,7 +99,21 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         return items
 
     def sources_callback(self, context):
-        global supported_sources
+        # Set of currently supported sources
+        supported_sources = {
+            'MeshVertex',
+            'MeshLoop',
+            'MeshUVLoop',
+            #'ShapeKeyPoint',
+            #'VertexGroupElement',
+            'Material',
+            'MeshLoopColor',
+            'MeshPolygon',
+            'Scene',
+            'Object',
+            'ShaderNode',    # Generic shader node class, includes all types, indirect lookup via .inputs (keys obtained via inputs.keys())
+        }
+        
         items = []
         for src in supported_sources:
             rna = getattr(bpy.types, src).bl_rna
@@ -121,8 +125,10 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         type = self.data_source
         attr = self.data_property
         if type.startswith('ShaderNode'):
+            global original_shader_nodes_per_prop_name
             map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
-            datatype = get_shader_input_attr(type, attr, 'type')# Mapping for shader inputs
+            type_usable = original_shader_nodes_per_prop_name[attr]
+            datatype = get_shader_input_attr(type_usable, attr, 'type') # Mapping for shader inputs
             self.fmt = map_fmt[datatype]
         else:
             att = getattr(bpy.types, type).bl_rna.properties[attr]
@@ -267,18 +273,9 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
     def invoke(self, context, event):
         # Blender Python trickery: dynamic addition of an index variable to the class
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")    # Each instance now has a batch index!
-
-        # Update items list, do this here as we have proper access to bpy here
-        # bpy isn't properly initialized yet in global scope and returns "_RestrictedData"
-        global items_glob, supported_sources, supported_shader_node_sources
-        supported_shader_node_sources = get_shader_nodes_inputs()
-        vals = supported_shader_node_sources.keys()
-        #supported_sources.update(vals)
-        #for src in vals:
-        #    rna = getattr(bpy.types, src).bl_rna
-        #    items_glob.append((rna.identifier, rna.name, rna.description))
-        #    items_glob.extend([r for r in supported_shader_node_sources[src]])
-
+        
+        init_shader_node_props()
+        
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
@@ -455,6 +452,9 @@ def register():
         bpy.utils.register_class(cls)
     
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+    
+    # Workaround. See: https://blenderartists.org/t/how-do-i-solve-this-error-restrictcontext/1445005/4
+    bpy.app.timers.register(init_shader_node_props, first_interval=0.1)
 
 
 def unregister():
