@@ -263,53 +263,6 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         default="",
         update=update_filter    # See Blender issue 104221
     )
-    
-    """
-    def init_passthrough(self):
-        """"Initialize the export properties for a passthrough export""""
-        op = self
-
-        # op.vertex_format.clear()
-        item_sub_1 = op.vertex_format.add()
-        item_sub_1.name = ''
-        item_sub_1.datapath.clear()
-        item_sub_2 = item_sub_1.datapath.add()
-        item_sub_2.name = ''
-        item_sub_2.node = 'MeshVertex'
-        item_sub_2 = item_sub_1.datapath.add()
-        item_sub_2.name = ''
-        item_sub_2.node = 'co'
-        item_sub_1.fmt = 'fff'
-        item_sub_1.int = 0
-        item_sub_1.func = 'invert_y'
-        item_sub_1.args = ''
-        item_sub_1 = op.vertex_format.add()
-        item_sub_1.name = ''
-        item_sub_1.datapath.clear()
-        item_sub_2 = item_sub_1.datapath.add()
-        item_sub_2.name = ''
-        item_sub_2.node = 'MeshLoopColor'
-        item_sub_2 = item_sub_1.datapath.add()
-        item_sub_2.name = ''
-        item_sub_2.node = 'color'
-        item_sub_1.fmt = 'BBBB'
-        item_sub_1.int = 0
-        item_sub_1.func = 'vec_to_bytes'
-        item_sub_1.args = ''
-        item_sub_1 = op.vertex_format.add()
-        item_sub_1.name = ''
-        item_sub_1.datapath.clear()
-        item_sub_2 = item_sub_1.datapath.add()
-        item_sub_2.name = ''
-        item_sub_2.node = 'MeshUVLoop'
-        item_sub_2 = item_sub_1.datapath.add()
-        item_sub_2.name = ''
-        item_sub_2.node = 'uv'
-        item_sub_1.fmt = 'ff'
-        item_sub_1.int = 0
-        item_sub_1.func = 'invert_v'
-        item_sub_1.args = ''
-    """
 
     def invoke(self, context, event):
         # Blender Python trickery: dynamic addition of an index variable to the class
