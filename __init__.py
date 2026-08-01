@@ -127,9 +127,16 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         if type.startswith('ShaderNode'):
             global original_shader_nodes_per_prop_name
             map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
-            type_usable = original_shader_nodes_per_prop_name[attr]
-            datatype = get_shader_input_attr(type_usable, attr, 'type') # Mapping for shader inputs
-            self.fmt = map_fmt[datatype]
+            #TODO Sometimes an attribute still appears to be not found on the usable type.
+            # Note: it could be that identically named inputs on different shader node types 
+            # are of different types. The exporter currently simply ignores this.
+            try:
+                type_usable = original_shader_nodes_per_prop_name[attr]
+                datatype = get_shader_input_attr(type_usable, attr, 'type') # Mapping for shader inputs
+                self.fmt = map_fmt[datatype]
+            except:
+                # Don't change anything if the above fails for any reason
+                pass
         else:
             att = getattr(bpy.types, type).bl_rna.properties[attr]
             map_fmt = {'FLOAT':'f','INT':'i', 'BOOLEAN':'?'}    # Mapping for RNA-based attributes
