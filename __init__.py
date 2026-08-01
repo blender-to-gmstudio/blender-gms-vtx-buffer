@@ -248,6 +248,9 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
 
     def update_filter(self, context):
         """Update the file filter"""
+        if context.space_data.type != 'FILE_BROWSER':
+            return
+        
         params = context.space_data.params
         custom_ext = self.custom_extension
         ext = ".vbx" if not custom_ext else custom_ext
