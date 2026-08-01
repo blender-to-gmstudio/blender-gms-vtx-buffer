@@ -127,7 +127,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
         if type.startswith('ShaderNode'):
             global original_shader_nodes_per_prop_name
             map_fmt = {'VALUE': 'f', 'INT': 'i', 'BOOLEAN': '?', 'VECTOR': 'fff', 'RGBA': 'BBBB'}   # Add shader node input types
-            #TODO Sometimes an attribute still appears to be not found on the usable type.
+            # TODO Sometimes an attribute still appears to be not found on the usable type.
             # Note: it could be that identically named inputs on different shader node types 
             # are of different types. The exporter currently simply ignores this.
             try:
@@ -304,6 +304,14 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         del bpy.types.Object.batch_index
 
     def execute(self, context):
+        # Filepath check
+        # Can be missing dirname for collection export if .blend file wasn't saved yet
+        if os.path.dirname(self.filepath) == "":
+            self.report({'WARNING'}, ("Filepath has no directory part. "
+                "The .blend file might need to be saved a first time. "
+                "Cancelling..."))
+            return {'CANCELLED'}
+        
         # Putting this here seems to fix #22
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")
 
