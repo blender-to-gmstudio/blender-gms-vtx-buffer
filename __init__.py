@@ -57,9 +57,6 @@ class VBXAddonPreferences(AddonPreferences):
         layout.operator("export_scene.install_vbx_presets", text="Install Presets")
 
 
-# Whether the vertex format definition was initialized a first time or not
-initialized = False
-
 # Set of currently supported sources
 supported_sources = {
     'MeshVertex',
@@ -326,12 +323,6 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         #    items_glob.append((rna.identifier, rna.name, rna.description))
         #    items_glob.extend([r for r in supported_shader_node_sources[src]])
 
-        # Do some custom initialization, not using any preset file.
-        global initialized
-        if not initialized:
-            #ExportGMSVertexBuffer.init_passthrough(self)
-            pass
-
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
@@ -359,8 +350,6 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         from . import export_gms_vtx_buffer
         keywords = self.as_keywords(ignore=("check_existing", "filter_glob", "active_attribute_index"))
         result = export_gms_vtx_buffer.export(context, **keywords)
-        global initialized
-        initialized = True
         return result
 
 
