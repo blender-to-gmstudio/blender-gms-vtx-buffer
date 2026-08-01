@@ -4,7 +4,7 @@ This exporter can be used to export all kinds of vertex formats.
 
 ## Description
 
-* Generates a file with vertex buffer contents
+* Generates a file with (vertex) buffer contents
 * Applies transforms & modifiers
 * Generates an accompanying JSON file that describes all exported content
 * Features: 
@@ -12,27 +12,29 @@ This exporter can be used to export all kinds of vertex formats.
     * Static geometry batches
     * Dynamic geometry batches (mesh data + offset per mesh/object in json file)
     * Batched morphs
-  * Morphs & per-frame stuff, including interpolation
-  * Basic export of any material/shader properties
+    * Basic export of any material/shader properties
+  * Usable as a collection exporter
 
-## Installing the plugin in Blender
+## Installing the add-on in Blender
 
 * In Blender, go to `Edit` > `Preferences`
 * Go to tab `Add-ons` and select `Install from File...`
-* Select the zip file `blender-gms-vtx-buffer-v1.0.13.zip` and confirm (the filename will be different for another version of the exporter)
+* Select the zip file `blender-gms-vtx-buffer-v1.1.0.zip` and confirm (the filename will be different for another version of the exporter)
 * Tick the checkbox next to `Import-Export: Export GameMaker Vertex Buffer`
 * Click `Save User Settings`
-* The plugin is now ready to be used
+* The add-on is now ready to be used
 
 ### Installing presets
 
 Preset files are Python files (.py) that contain an operator preset's code.
 These files need to placed in the right directory for the operator to detect them.
 To install a new preset: 
-* Navigate to `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.82\scripts\presets\operator`
+* Navigate to `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\4.5\scripts\presets\operator`
 * Create a new directory with the name `export_scene.gms_vtx_buffer`. This is the bl_idname of the operator.
 * Place the preset file in this directory
 The included presets can be installed from the add-on's preferences
+
+> **Important** The preset format changed in v1.1.0. Presets created with an older version of the exporter will no longer work!
 
 ## Usage
 ### In Blender
@@ -51,9 +53,6 @@ The included presets can be installed from the add-on's preferences
 To export the vertex format, tick `Export Object Data`.
 This generates an additional .json file which contains a description of the vertex format.
 The format description can be found under the key `blmod/mesh_data/format`.
-
-The add-on does not currently come with any code for GameMaker.
-Many examples will be added to and explained in the wiki.
 
 ### Advanced
 
