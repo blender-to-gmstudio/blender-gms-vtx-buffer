@@ -60,9 +60,19 @@ def init_shader_node_props():
     shader_nodes = get_shader_nodes_inputs()
     for shader_node_name, inputs in shader_nodes.items():
         for input in inputs:
-            mapping[input[0]] = input
-            original_shader_nodes_per_prop_name[input[0]] = shader_node_name
-    supported_shader_node_properties = [v for v in mapping.values()]
+            identifier = input[0]
+            mapping[identifier] = input
+            
+            if identifier not in original_shader_nodes_per_prop_name:
+                original_shader_nodes_per_prop_name[identifier] = []
+            
+            original_shader_nodes_per_prop_name[identifier].append(shader_node_name)
+    #supported_shader_node_properties = [v for v in mapping.values()]
+    supported_shader_node_properties = []
+    for val in mapping.values():
+        # List shader nodes on which this input exists
+        description = "{} ({})".format(val[1], ", ".join(original_shader_nodes_per_prop_name[val[0]]))
+        supported_shader_node_properties.append((val[0], val[1], description))
     
     #print(original_shader_nodes_per_prop_name)
 

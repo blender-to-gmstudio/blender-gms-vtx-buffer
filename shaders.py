@@ -26,7 +26,7 @@ def get_shader_nodes_inputs():
     for name in names:
         nodes.clear()
         node = nodes.new(name)
-        socket_to_dict = lambda s: (s.name, s.name, s.description + "(" + name.removeprefix(prefix) + ")")
+        socket_to_dict = lambda s: (s.name, s.name, s.description)
         inputs = [socket_to_dict(input) for input in node.inputs if input.type in SUPPORTED_SHADERNODE_INPUT_DATA_TYPES]
 
         # Don't return nodes that have no inputs
