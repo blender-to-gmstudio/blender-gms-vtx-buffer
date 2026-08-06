@@ -100,7 +100,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
 
     def sources_callback(self, context):
         # Set of currently supported sources
-        supported_sources = {
+        supported_sources = [
             'MeshVertex',
             'MeshLoop',
             'MeshUVLoop',
@@ -112,7 +112,7 @@ class VertexAttributeType(bpy.types.PropertyGroup):
             'Scene',
             'Object',
             'ShaderNode',    # Generic shader node class, includes all types, indirect lookup via .inputs (keys obtained via inputs.keys())
-        }
+        ]
         
         items = []
         for src in supported_sources:
