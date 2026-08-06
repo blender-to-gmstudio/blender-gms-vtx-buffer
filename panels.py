@@ -12,7 +12,9 @@ def export_panel_general(layout, operator, is_file_browser):
     if body:
         box = body.box()
 
-        box.prop(operator, property='selection_only')
+        if is_file_browser:
+            box.prop(operator, property='selection_only')
+        
         box.prop(operator, property='frame_option')
         box.prop(operator, property='file_mode')
         box.prop(operator, property='custom_extension')

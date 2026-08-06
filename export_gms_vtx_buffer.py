@@ -195,8 +195,7 @@ def object_to_json(obj):
 
 def export(context, filepath,
         file_mode,
-        selection_only,
-        collection,
+        object_selection,
         vertex_format,
         reverse_loop,
         frame_option,
@@ -230,9 +229,7 @@ def export(context, filepath,
         # Only the current frame
         frame_range = range(scene.frame_current, scene.frame_current+1)
         frame_offset = scene.frame_current  # Offset to subtract in the data buffer
-
-    # Which models to export
-    object_selection = context.selected_objects if selection_only else context.scene.objects
+    
     mesh_selection = [obj for obj in object_selection if obj.type in MESHLIKE_TYPES]    # TODO Does this break morphs?
     for i, obj in enumerate(mesh_selection): obj.batch_index = i   # Guarantee a predictable batch index
 

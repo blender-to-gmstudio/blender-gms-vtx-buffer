@@ -312,11 +312,23 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
                 "Cancelling..."))
             return {'CANCELLED'}
         
+        # Figure out what we're going to export, cancel if there's nothing to export
+        if self.collection:
+            object_selection = bpy.data.collections[self.collection].all_objects
+        else:
+            object_selection = context.selected_objects if self.selection_only else context.scene.objects
+        
+        if not object_selection:
+            self.report({'WARNING'}, "Nothing to export")
+            return {'CANCELLED'}
+        
         # Putting this here seems to fix #22
         bpy.types.Object.batch_index = bpy.props.IntProperty(name="Batch Index")
-
+        
+        # Do actual export
         from . import export_gms_vtx_buffer
-        keywords = self.as_keywords(ignore=("check_existing", "filter_glob", "active_attribute_index"))
+        keywords = self.as_keywords(ignore=("check_existing", "filter_glob", "collection", "selection_only", "active_attribute_index"))
+        keywords['object_selection'] = object_selection[:]
         result = export_gms_vtx_buffer.export(context, **keywords)
         return result
 
