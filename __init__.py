@@ -329,7 +329,8 @@ class ExportGMSVertexBuffer(bpy.types.Operator, ExportHelper):
         from . import export_gms_vtx_buffer
         keywords = self.as_keywords(ignore=("check_existing", "filter_glob", "collection", "selection_only", "active_attribute_index"))
         keywords['object_selection'] = object_selection[:]
-        result = export_gms_vtx_buffer.export(context, **keywords)
+        keywords['scene'] = context.scene
+        result = export_gms_vtx_buffer.export(**keywords)
         return result
 
 

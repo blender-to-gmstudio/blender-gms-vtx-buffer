@@ -193,8 +193,9 @@ def object_to_json(obj):
     return result
 
 
-def export(context, filepath,
+def export(filepath,
         file_mode,
+        scene,
         object_selection,
         vertex_format,
         reverse_loop,
@@ -209,15 +210,12 @@ def export(context, filepath,
         ):
     """Main entry point for export"""
 
-    # TODO Get rid of context in this function
-
     from os.path import split, splitext
 
     # Prepare a bit
     root, ext = splitext(filepath)
     base, fname = split(filepath)
-    fn = splitext(fname)[0]
-    scene = context.scene
+    filename = splitext(fname)[0]
 
     # Work out the frames to export
     # frame_offset is used to index the correct bytearray! (index 0 for frame_start)
@@ -319,7 +317,7 @@ def export(context, filepath,
         # Export additional info that might be useful
         json_data["blmod"] = {
             "mesh_data":{
-                "location":fn + ext,
+                "location":filename + ext,
                 "format":[{"type":x.data_source[0].node,"attr":x.data_property[1].node,"fmt":x.fmt} for x in vertex_format],
                 "ranges":{obj.name:{"no_verts":no_verts_per_object[obj],"offset":offset[obj]} for obj in mesh_selection},
             },
@@ -346,7 +344,7 @@ def export(context, filepath,
                     tex_node = tex_node[0]
                     image = tex_node.image
                     if image:
-                        image.save_render(base + '/' + image.name, scene=context.scene)
+                        image.save_render(base + '/' + image.name, scene=scene)
 
     # Cleanup: remove dynamic property from class
     del bpy.types.Object.batch_index
